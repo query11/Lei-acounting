@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lei记账</string>
+    <string name="notification_service_label">Lei记账 · 支付通知识别</string>
+    <string name="accessibility_service_label">Lei记账 · 支付页面识别</string>
+    <string name="accessibility_service_description">只读取微信和支付宝「支付成功」页面上的金额和商户，用于自动记账。不会读取其它 App，不会点击或操作任何界面。</string>
+</resources>
