@@ -1,7 +1,13 @@
 package com.lei.accounting.ui
 
 import android.app.Activity
+import android.app.StatusBarManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon as DrawableIcon
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,7 +44,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lei.accounting.R
 import com.lei.accounting.ai.SummaryWorker
+import com.lei.accounting.capture.RecognizeTileService
+import com.lei.accounting.core.model.PayApp
 import com.lei.accounting.system.SystemStatus
 import kotlinx.coroutines.launch
 
@@ -47,6 +56,7 @@ fun SettingsScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val prefs = vm.prefs
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val latestNotification by vm.latestNotification.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     // 每次回到页面都重新检查权限状态（用户可能刚从系统设置回来）
@@ -93,6 +103,39 @@ fun SettingsScreen(vm: MainViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         TextButton(onClick = { SystemStatus.openAppDetails(context) }) { Text("打开应用详情") }
+
+        Text("漏记了怎么办", style = MaterialTheme.typography.titleMedium)
+        NotificationTipsCard(latestNotification?.let { l ->
+            val minutes = (System.currentTimeMillis() - l.time) / 60_000
+            val ago = when {
+                minutes < 1 -> "刚刚"
+                minutes < 60 -> "$minutes 分钟前"
+                minutes < 24 * 60 -> "${minutes / 60} 小时前"
+                else -> "${minutes / (24 * 60)} 天前"
+            }
+            "最近一次收到：$ago · ${l.pkg} · ${l.result}"
+        } ?: "还没收到过微信/支付宝的任何通知（通知监听刚开启、或通知被关掉了）")
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("⑥ 下拉快捷开关「识别记账」", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "不依赖通知。付完款停在「支付成功」页面，下拉通知栏点一下「识别记账」就能记上。" +
+                        "添加方法：下拉通知栏 → 编辑（铅笔图标）→ 把「识别记账」拖到上面。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    TextButton(onClick = { requestAddTile(context) }) { Text("一键添加到下拉菜单") }
+                }
+            }
+        }
+        var captureLog by remember { mutableStateOf(prefs.captureLog) }
+        SwitchRow("记录识别日志", "记下收到了哪些通知、读到了哪些页面，方便排查漏记（只存本机，最多 500 条）", captureLog) {
+            captureLog = it
+            prefs.captureLog = it
+        }
+        var showLogs by remember { mutableStateOf(false) }
+        OutlinedButton(onClick = { showLogs = true }) { Text("查看识别日志") }
+        if (showLogs) CaptureLogDialog(vm) { showLogs = false }
 
         Text("后台与提醒", style = MaterialTheme.typography.titleMedium)
         var hide by remember { mutableStateOf(prefs.hideFromRecents) }
@@ -179,6 +222,44 @@ fun SettingsScreen(vm: MainViewModel) {
             }
         }) { Text("导出全部账单（CSV）") }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun NotificationTipsCard(status: String) {
+    val context = LocalContext.current
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("⑤ 微信 / 支付宝的通知不要关", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "系统的「免打扰」没关系，通知照样能读到。但下面两种情况 App 根本不发通知，就收不到：\n" +
+                    "· 在微信里把「微信支付」公众号设成了「消息免打扰」→ 打开微信支付公众号 → 右上角 ··· → 关掉消息免打扰；\n" +
+                    "· 在系统通知管理里关掉了微信或支付宝的通知。\n" +
+                    "不想被打扰的话，把通知设成「静默 / 不弹横幅 / 不响铃」即可，不要直接关掉。",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(status, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Row {
+                TextButton(onClick = { SystemStatus.openAppNotificationSettings(context, PayApp.WECHAT.pkg) }) { Text("微信通知设置") }
+                TextButton(onClick = { SystemStatus.openAppNotificationSettings(context, PayApp.ALIPAY.pkg) }) { Text("支付宝通知设置") }
+            }
+        }
+    }
+}
+
+/** Android 13+：弹出系统对话框，一键把「识别记账」加到下拉快捷开关 */
+private fun requestAddTile(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val sbm = context.getSystemService(StatusBarManager::class.java) ?: return
+    runCatching {
+        sbm.requestAddTileService(
+            ComponentName(context, RecognizeTileService::class.java),
+            context.getString(R.string.tile_label),
+            DrawableIcon.createWithResource(context, R.drawable.ic_stat_bill),
+            context.mainExecutor,
+        ) { }
+    }.onFailure {
+        Toast.makeText(context, "这个系统不支持一键添加，请在下拉菜单的编辑页里手动拖进来", Toast.LENGTH_LONG).show()
     }
 }
 

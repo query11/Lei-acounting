@@ -1,8 +1,10 @@
 package com.lei.accounting.core
 
 import com.lei.accounting.core.model.BillType
+import com.lei.accounting.core.model.CaptureSource
 import com.lei.accounting.core.model.PayApp
 import com.lei.accounting.core.parser.AmountParser
+import com.lei.accounting.core.parser.NotificationParser
 import com.lei.accounting.core.parser.PageTextParser
 import com.lei.accounting.core.parser.Sanitizer
 import org.junit.Assert.assertEquals
@@ -62,5 +64,35 @@ class PageTextParserTest {
         assertFalse(s.contains("4200001234567890"))
         assertFalse(s.contains("13800138000"))
         assertTrue(s.contains("¥9.90"))
+    }
+}
+
+class ManualParseTest {
+    @Test fun ocrScreenWithStatusBarNoDoneButton() {
+        // 手动触发时 OCR 读到的整屏文字：状态栏 + 页面，没有「完成」按钮也要能识别
+        val lines = listOf("14:05", "5G", "87%", "支付成功", "罗森(新宿店)", "¥680.00", "支付方式", "零钱")
+        val b = PageTextParser.parseManual(PayApp.WECHAT, lines, 0, CaptureSource.OCR)!!
+        assertEquals(68000L, b.amountCents)
+        assertEquals("罗森(新宿店)", b.merchant)
+        assertEquals("零钱", b.payMethod)
+        // 自动模式仍然要求「完成」按钮
+        assertNull(PageTextParser.parse(PayApp.WECHAT, lines, 0, CaptureSource.OCR))
+    }
+
+    @Test fun manualWithoutTitle() {
+        val lines = listOf("12:30", "肯德基", "-36.50", "交易成功")
+        val b = PageTextParser.parseManual(PayApp.ALIPAY, lines, 0, CaptureSource.OCR)!!
+        assertEquals(3650L, b.amountCents)
+        assertEquals("肯德基", b.merchant)
+    }
+
+    @Test fun manualNoAmount() {
+        assertNull(PageTextParser.parseManual(PayApp.WECHAT, listOf("聊天", "你好"), 0, CaptureSource.OCR))
+    }
+
+    @Test fun wechatPayNotificationCheck() {
+        assertTrue(NotificationParser.isWechatPayNotification("微信支付", "已支付¥1.00"))
+        assertTrue(NotificationParser.isWechatPayNotification("微信", "[2条]微信支付: 已支付¥8.00"))
+        assertFalse(NotificationParser.isWechatPayNotification("张三", "晚上吃饭吗"))
     }
 }

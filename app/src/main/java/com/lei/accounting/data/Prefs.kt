@@ -44,6 +44,11 @@ class Prefs(context: Context) {
         get() = sp.getInt("summary_hour", 22)
         set(v) = sp.edit { putInt("summary_hour", v.coerceIn(0, 23)) }
 
+    /** 记录识别日志（本机保存，用于排查漏记） */
+    var captureLog: Boolean
+        get() = sp.getBoolean("capture_log", true)
+        set(v) = sp.edit { putBoolean("capture_log", v) }
+
     val aiReady: Boolean get() = aiEnabled && apiKey.isNotBlank()
 
     companion object {

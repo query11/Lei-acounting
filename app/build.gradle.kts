@@ -17,8 +17,8 @@ android {
         // 无障碍截图 API（takeScreenshot）需要 Android 11+；Flyme AIOS 远高于此
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {

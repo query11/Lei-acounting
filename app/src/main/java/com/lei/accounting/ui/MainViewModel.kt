@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.lei.accounting.ai.AiClassifyWorker
 import com.lei.accounting.ai.DeepSeekClient
 import com.lei.accounting.ai.SummaryGenerator
+import com.lei.accounting.capture.CaptureLog
 import com.lei.accounting.core.ai.ChatPrompt
 import com.lei.accounting.core.model.BillType
 import com.lei.accounting.core.model.formatYuan
@@ -16,6 +17,7 @@ import com.lei.accounting.core.summary.SummaryCalculator
 import com.lei.accounting.data.AiStatus
 import com.lei.accounting.data.BillEntity
 import com.lei.accounting.data.BillRepository
+import com.lei.accounting.data.CaptureLogEntity
 import com.lei.accounting.data.Prefs
 import com.lei.accounting.data.SummaryEntity
 import com.lei.accounting.data.billType
@@ -66,6 +68,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val savedSummary: StateFlow<SummaryEntity?> = range.flatMapLatest { repo.summaries.observe(it.key) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** 识别日志（最近 300 条） */
+    val logs: StateFlow<List<CaptureLogEntity>> = repo.logs.observeRecent(300)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 最近一次收到微信/支付宝通知的记录，用来判断通知是不是被关掉了 */
+    val latestNotification: StateFlow<CaptureLogEntity?> = repo.logs.observeLatest(CaptureLog.NOTIFICATION)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun clearLogs() = viewModelScope.launch { repo.logs.clear() }
+
+    suspend fun exportLogs(): String {
+        val fmt = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")
+        return repo.logs.recent(500).joinToString("\n") { l ->
+            val t = SummaryCalculator.localDateTime(l.time).format(fmt)
+            "$t [${l.channel}] ${l.pkg} ${l.result}" + if (l.detail.isNotBlank()) "\n    ${l.detail}" else ""
+        }
+    }
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()

@@ -38,6 +38,10 @@ object NotificationParser {
         }
     }
 
+    /** 是不是「微信支付」这类服务号的推送（否则就是聊天消息，内容不应该被记录） */
+    fun isWechatPayNotification(title: String?, text: String?): Boolean =
+        title?.trim() in wechatPayTitles || wechatPrefix.containsMatchIn(text?.trim().orEmpty())
+
     private fun parseWechat(title: String, text: String, time: Long): ParsedBill? {
         val prefixed = wechatPrefix.find(text)
         if (title !in wechatPayTitles && prefixed == null) return null

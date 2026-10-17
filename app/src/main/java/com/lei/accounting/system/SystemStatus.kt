@@ -47,6 +47,16 @@ object SystemStatus {
         if (!ok) start(context, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
     }
 
+    /** 打开某个 App（微信 / 支付宝）的系统通知设置页 */
+    fun openAppNotificationSettings(context: Context, pkg: String) {
+        val ok = start(
+            context,
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg),
+            toastOnFail = false,
+        )
+        if (!ok) start(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg")))
+    }
+
     fun openAppDetails(context: Context) =
         start(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
 

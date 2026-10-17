@@ -13,6 +13,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lei.accounting.core.dedup.BillMerger
 import com.lei.accounting.core.model.BillRecord
 import com.lei.accounting.core.model.BillType
@@ -76,6 +78,43 @@ data class SummaryEntity(
     val createdAt: Long = System.currentTimeMillis(),
 )
 
+/**
+ * 识别日志：记录收到了哪些微信/支付宝通知、打开了哪些页面、识别结果如何。
+ * 只存在本机，最多保留 500 条，用来排查「为什么这一笔没记上」。
+ */
+@Entity(tableName = "capture_logs", indices = [Index("time")])
+data class CaptureLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val time: Long,
+    /** 通知 / 页面 / 截图 / 手动 */
+    val channel: String,
+    val pkg: String,
+    val result: String,
+    val detail: String,
+)
+
+@Dao
+interface CaptureLogDao {
+    @Insert
+    suspend fun insert(log: CaptureLogEntity)
+
+    @Query("SELECT * FROM capture_logs ORDER BY id DESC LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<CaptureLogEntity>>
+
+    @Query("SELECT * FROM capture_logs ORDER BY id DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<CaptureLogEntity>
+
+    /** 某个渠道最近一条真实事件（排除「服务已连接」这类没有包名的状态记录） */
+    @Query("SELECT * FROM capture_logs WHERE channel = :channel AND pkg != '' ORDER BY id DESC LIMIT 1")
+    fun observeLatest(channel: String): Flow<CaptureLogEntity?>
+
+    @Query("DELETE FROM capture_logs WHERE id NOT IN (SELECT id FROM capture_logs ORDER BY id DESC LIMIT :keep)")
+    suspend fun prune(keep: Int)
+
+    @Query("DELETE FROM capture_logs")
+    suspend fun clear()
+}
+
 @Dao
 interface BillDao {
     @Insert
@@ -118,18 +157,32 @@ interface SummaryDao {
     suspend fun get(key: String): SummaryEntity?
 }
 
-@Database(entities = [BillEntity::class, SummaryEntity::class], version = 1, exportSchema = true)
+@Database(entities = [BillEntity::class, SummaryEntity::class, CaptureLogEntity::class], version = 2, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun bills(): BillDao
     abstract fun summaries(): SummaryDao
+    abstract fun logs(): CaptureLogDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
 
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "lei_accounting.db")
+                .addMigrations(MIGRATION_1_2)
                 .build()
                 .also { instance = it }
         }
+    }
+}
+
+/** v0.1 → v0.2：新增识别日志表，原有账单保留 */
+private val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `capture_logs` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `time` INTEGER NOT NULL, `channel` TEXT NOT NULL, " +
+                "`pkg` TEXT NOT NULL, `result` TEXT NOT NULL, `detail` TEXT NOT NULL)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_capture_logs_time` ON `capture_logs` (`time`)")
     }
 }

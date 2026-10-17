@@ -60,6 +60,18 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- 下拉快捷开关：手动识别当前页面 -->
+        <service
+            android:name=".capture.RecognizeTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_bill"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".system.BootReceiver"
             android:exported="false">

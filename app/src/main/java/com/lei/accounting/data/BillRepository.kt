@@ -17,6 +17,7 @@ class BillRepository private constructor(context: Context) {
     private val db = AppDatabase.get(context)
     val bills = db.bills()
     val summaries = db.summaries()
+    val logs = db.logs()
     private val lock = Mutex()
 
     sealed interface SaveResult {

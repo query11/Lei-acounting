@@ -20,7 +20,7 @@ object PageTextParser {
     /** 这些文字不可能是商户名 */
     private val notMerchant = Regex(
         "^(支付成功|付款成功|转账成功|已支付|支付完成|付款完成|交易成功|收款成功|完成|返回|关闭|确定|取消|更多|分享|" +
-            "支付方式|付款方式|收款方|商户|商家|商品|订单号|交易单号|当前状态|查看账单|账单详情|查看详情|" +
+            "返回商家|完成并返回|支付方式|付款方式|收款方|商户|商家|商品|订单号|交易单号|当前状态|查看账单|账单详情|查看详情|" +
             "零钱|零钱通|余额|余额宝|花呗|信用卡|储蓄卡|银行卡|优惠|立减|已优惠|积分|广告|推荐|为你推荐|" +
             "¥|￥|元|人民币|微信支付|支付宝|备注|.*\\d{6,}.*)$",
     )
@@ -35,14 +35,31 @@ object PageTextParser {
         return hasTitle && hasDone
     }
 
-    fun parse(app: PayApp, rawTexts: List<String>, timeMillis: Long, source: CaptureSource = CaptureSource.PAGE): ParsedBill? {
+    fun parse(app: PayApp, rawTexts: List<String>, timeMillis: Long, source: CaptureSource = CaptureSource.PAGE): ParsedBill? =
+        parseInternal(app, rawTexts, timeMillis, source, requireSuccessPage = true)
+
+    /**
+     * 手动触发（下拉快捷开关「识别记账」）时用的宽松版本：
+     * 用户明确说了「这一屏是账单」，所以不要求「完成」按钮，有金额就行。
+     */
+    fun parseManual(app: PayApp, rawTexts: List<String>, timeMillis: Long, source: CaptureSource): ParsedBill? =
+        parseInternal(app, rawTexts, timeMillis, source, requireSuccessPage = false)
+
+    private fun parseInternal(
+        app: PayApp,
+        rawTexts: List<String>,
+        timeMillis: Long,
+        source: CaptureSource,
+        requireSuccessPage: Boolean,
+    ): ParsedBill? {
         val texts = mergeSplitAmounts(rawTexts.map { it.trim() }.filter { it.isNotEmpty() })
-        if (!looksLikeSuccessPage(texts)) return null
+        if (requireSuccessPage && !looksLikeSuccessPage(texts)) return null
         val titleIdx = texts.indexOfFirst { it in expenseTitles || it in incomeTitles }
-        val type = if (texts[titleIdx] in incomeTitles) BillType.INCOME else BillType.EXPENSE
+        val type = if (titleIdx >= 0 && texts[titleIdx] in incomeTitles) BillType.INCOME else BillType.EXPENSE
 
         // 金额：优先取成功标题之后的第一个独立金额
-        val amountIdx = (titleIdx until texts.size).firstOrNull { AmountParser.parseStandalone(texts[it]) != null }
+        val searchFrom = maxOf(titleIdx, 0)
+        val amountIdx = (searchFrom until texts.size).firstOrNull { AmountParser.parseStandalone(texts[it]) != null }
             ?: texts.indices.firstOrNull { AmountParser.parseStandalone(texts[it]) != null }
         val amount = amountIdx?.let { AmountParser.parseStandalone(texts[it]) }
             ?: AmountParser.parse(texts.joinToString(" "))
@@ -62,7 +79,9 @@ object PageTextParser {
         }
         if (merchant.isEmpty() && amountIdx != null) {
             // 微信/支付宝的成功页一般是：标题 → 商户名 → 金额，或 标题 → 金额 → 商户名
-            val before = (amountIdx - 1 downTo titleIdx + 1).firstOrNull { isMerchantLike(texts[it]) }
+            // 标题在金额前面时只在两者之间找；没有标题或标题在后面时，往上一直找到顶
+            val lowest = if (titleIdx in 0 until amountIdx) titleIdx + 1 else 0
+            val before = (amountIdx - 1 downTo lowest).firstOrNull { isMerchantLike(texts[it]) }
             val after = (amountIdx + 1 until minOf(texts.size, amountIdx + 3)).firstOrNull { isMerchantLike(texts[it]) }
             merchant = (before ?: after)?.let { texts[it] }.orEmpty()
         }
@@ -85,7 +104,8 @@ object PageTextParser {
         if (notMerchant.matches(t)) return false
         if (AmountParser.parseStandalone(t) != null) return false
         if (t.all { it.isDigit() || it in ".:-/ " }) return false // 时间、日期
-        return t.any { it.isLetter() }
+        // 至少有一个汉字，或 3 个以上字母（KFC、Apple）；排除 OCR 读到的状态栏「5G」「87%」之类
+        return t.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN } || t.count { it.isLetter() } >= 3
     }
 
     /** 有的页面把「¥」和「42.10」拆成两个节点，这里把它们拼回去 */
