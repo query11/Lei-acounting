@@ -91,6 +91,20 @@ object Notifier {
         NotificationManagerCompat.from(context).notify(("missed$time").hashCode(), n)
     }
 
+    /** 「识别记账」快捷开关没识别出来时的提示（可点开手动记一笔） */
+    fun manualResult(context: Context, message: String) {
+        if (!canPost(context)) return
+        val n = NotificationCompat.Builder(context, CH_RECORD)
+            .setSmallIcon(R.drawable.ic_stat_bill)
+            .setContentTitle("识别记账")
+            .setContentText(message)
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .setTimeoutAfter(5 * 60_000L)
+            .build()
+        NotificationManagerCompat.from(context).notify("manual".hashCode(), n)
+    }
+
     fun summary(context: Context, s: SummaryEntity) {
         if (!canPost(context)) return
         val text = s.aiText.ifBlank { s.localText }

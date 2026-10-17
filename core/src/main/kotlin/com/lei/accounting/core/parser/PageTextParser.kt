@@ -16,6 +16,8 @@ object PageTextParser {
     private val expenseTitles = setOf("支付成功", "付款成功", "转账成功", "已支付", "支付完成", "付款完成", "交易成功", "充值成功", "缴费成功")
     private val incomeTitles = setOf("收款成功", "已收款", "已收钱", "退款成功")
     private val doneButtons = setOf("完成", "返回商家", "完成并返回")
+    private const val MAX_TITLE_LEN = 8
+    private const val MAX_DONE_LEN = 6
 
     /** 这些文字不可能是商户名 */
     private val notMerchant = Regex(
@@ -27,13 +29,26 @@ object PageTextParser {
     private val labelRe = Regex("^(收款方|商户名称|商户|商家|收款人|对方账户|商品|商品说明)[:：]?\\s*(.*)$")
     private val payMethodLabelRe = Regex("^(支付方式|付款方式)[:：]?\\s*(.*)$")
 
-    /** 快速判断：这一屏是不是刚支付完成的页面 */
-    fun looksLikeSuccessPage(texts: List<String>): Boolean {
-        val set = texts.map { it.trim() }.toSet()
-        val hasTitle = set.any { it in expenseTitles || it in incomeTitles }
-        val hasDone = set.any { it in doneButtons }
-        return hasTitle && hasDone
+    /**
+     * 是不是成功标题。除了完全相等，也接受短文本里包含标题（OCR 常把图标认成字符，例如「✓支付成功」「支付成功!」），
+     * 但长文本（聊天预览、商品描述）不算。
+     */
+    private fun titleOf(token: String): String? {
+        val t = token.trim()
+        if (t in expenseTitles || t in incomeTitles) return t
+        if (t.length > MAX_TITLE_LEN) return null
+        return incomeTitles.firstOrNull { t.contains(it) } ?: expenseTitles.firstOrNull { t.contains(it) }
     }
+
+    private fun isDoneButton(token: String): Boolean {
+        // OCR 偶尔会在字间插空格（「完 成」）
+        val t = token.replace(Regex("\\s+"), "")
+        return t in doneButtons || (t.length <= MAX_DONE_LEN && doneButtons.any { t.contains(it) })
+    }
+
+    /** 快速判断：这一屏是不是刚支付完成的页面 */
+    fun looksLikeSuccessPage(texts: List<String>): Boolean =
+        texts.any { titleOf(it) != null } && texts.any { isDoneButton(it) }
 
     fun parse(app: PayApp, rawTexts: List<String>, timeMillis: Long, source: CaptureSource = CaptureSource.PAGE): ParsedBill? =
         parseInternal(app, rawTexts, timeMillis, source, requireSuccessPage = true)
@@ -54,8 +69,8 @@ object PageTextParser {
     ): ParsedBill? {
         val texts = mergeSplitAmounts(rawTexts.map { it.trim() }.filter { it.isNotEmpty() })
         if (requireSuccessPage && !looksLikeSuccessPage(texts)) return null
-        val titleIdx = texts.indexOfFirst { it in expenseTitles || it in incomeTitles }
-        val type = if (titleIdx >= 0 && texts[titleIdx] in incomeTitles) BillType.INCOME else BillType.EXPENSE
+        val titleIdx = texts.indexOfFirst { titleOf(it) != null }
+        val type = if (titleIdx >= 0 && titleOf(texts[titleIdx]) in incomeTitles) BillType.INCOME else BillType.EXPENSE
 
         // 金额：优先取成功标题之后的第一个独立金额
         val searchFrom = maxOf(titleIdx, 0)
@@ -101,7 +116,7 @@ object PageTextParser {
     private fun isMerchantLike(s: String): Boolean {
         val t = s.trim()
         if (t.length !in 2..40) return false
-        if (notMerchant.matches(t)) return false
+        if (notMerchant.matches(t) || titleOf(t) != null) return false
         if (AmountParser.parseStandalone(t) != null) return false
         if (t.all { it.isDigit() || it in ".:-/ " }) return false // 时间、日期
         // 至少有一个汉字，或 3 个以上字母（KFC、Apple）；排除 OCR 读到的状态栏「5G」「87%」之类

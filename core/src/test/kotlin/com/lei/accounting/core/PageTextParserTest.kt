@@ -96,3 +96,19 @@ class ManualParseTest {
         assertFalse(NotificationParser.isWechatPayNotification("张三", "晚上吃饭吗"))
     }
 }
+
+class OcrTolerantSuccessPageTest {
+    @Test fun ocrMergesIconWithTitle() {
+        // OCR 把对勾图标认成了字符，「完成」按钮中间多了空格
+        val lines = listOf("14:20", "✓支付成功", "全家便利店", "¥15.80", "支付方式 零钱", "完 成")
+        val b = PageTextParser.parse(PayApp.WECHAT, lines, 0, CaptureSource.OCR)!!
+        assertEquals(1580L, b.amountCents)
+        assertEquals("全家便利店", b.merchant)
+        assertEquals("零钱", b.payMethod)
+    }
+
+    @Test fun longChatPreviewStillIgnored() {
+        val lines = listOf("微信支付: 已支付¥42.10", "完成")
+        assertFalse(PageTextParser.looksLikeSuccessPage(lines))
+    }
+}

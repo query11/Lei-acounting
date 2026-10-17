@@ -171,7 +171,8 @@ class PayPageService : AccessibilityService() {
             CASHIER_HINT.containsMatchIn(lastClassName) ->
                 openPaymentWindow(app, null, lastClassName)
         }
-        if (texts.size < MIN_READABLE_TEXTS && isPayLikePage() && autoOcrOnThisPage < MAX_AUTO_OCR_PER_PAGE) {
+        // 付款窗口里（刚扫码、刚打开收银台），读不到文字的页面都截图看一眼
+        if (texts.size < MIN_READABLE_TEXTS && (isPayLikePage() || pending != null) && autoOcrOnThisPage < MAX_AUTO_OCR_PER_PAGE) {
             autoOcrOnThisPage++
             ocr(app, manual = false)
         }
@@ -276,6 +277,8 @@ class PayPageService : AccessibilityService() {
      * 用户主动触发，所以不要求页面上有「完成」按钮；在购物 App 里也能用。
      */
     fun recognizeNow() {
+        CaptureLog.add(this, CaptureLog.MANUAL, null, "点击了「识别记账」，开始识别当前页面")
+        // 快捷开关会先通过透明页面把通知栏/控制中心收起来；这里再保险收一次
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
         }
@@ -289,7 +292,8 @@ class PayPageService : AccessibilityService() {
             } else {
                 screenshotLines { lines ->
                     if (lines == null) {
-                        toast("截图失败，这个页面可能禁止截图")
+                        CaptureLog.add(this, CaptureLog.MANUAL, pkg, "截图失败，这个页面可能禁止截图")
+                        feedback("识别失败：这个页面禁止截图")
                     } else {
                         onManualResult(parseManual(pkg, lines, CaptureSource.OCR), lines)
                     }
@@ -315,11 +319,12 @@ class PayPageService : AccessibilityService() {
         if (parsed != null) {
             BillRecorder.record(parsed)
             CaptureLog.add(this, CaptureLog.MANUAL, parsed.app.pkg, "识别为账单 ¥${parsed.amountCents.formatYuan()}", CaptureLog.summarize(texts))
+            // 「已记账」通知由 BillRecorder 发；这里再给一个即时提示
             toast("已记账 ¥${parsed.amountCents.formatYuan()} ${parsed.merchant}")
             closePaymentWindow("已手动确认")
         } else {
             CaptureLog.add(this, CaptureLog.MANUAL, lastApp?.pkg, "没找到金额", CaptureLog.summarize(texts))
-            toast("这一屏没找到金额，请停在支付成功或订单详情页面再试")
+            feedback("这一屏没找到金额，请停在支付成功或订单详情页面再试")
         }
     }
 
@@ -380,6 +385,12 @@ class PayPageService : AccessibilityService() {
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
+    /** 失败提示：Toast 之外再发一条通知——有的系统会拦截后台 Toast，免得用户以为点了没反应 */
+    private fun feedback(msg: String) {
+        toast(msg)
+        Notifier.manualResult(this, msg)
+    }
+
     /** 深度优先收集可见文字（最多 [MAX_NODES] 个节点，避免大列表页面耗时） */
     private fun collectTexts(root: AccessibilityNodeInfo): List<String> {
         val out = ArrayList<String>()
@@ -427,7 +438,7 @@ class PayPageService : AccessibilityService() {
         private const val MERCHANT_DEBOUNCE_MS = 700L
         private const val SAME_PAGE_MS = 5 * 60_000L
         private const val PAGE_PROBE_DELAY_MS = 1_200L
-        private const val SHADE_CLOSE_DELAY_MS = 700L
+        private const val SHADE_CLOSE_DELAY_MS = 900L
         private const val PAYMENT_WINDOW_MS = 3 * 60_000L
         private const val OCR_INTERVAL_MS = 4_000L
         private const val MAX_AUTO_OCR_PER_PAGE = 3
@@ -441,11 +452,15 @@ class PayPageService : AccessibilityService() {
          * 实际类名可以在「识别日志」里看到，不准的话按日志调整这里。
          */
         private val PAY_PAGE_HINT = Regex(
-            "(?i)wallet|remittance|cashier|pay|order|result|success|lite|msp|h5|nebula|xriver",
+            "(?i)wallet|remittance|cashier|pay|order|result|success|lite|msp|h5|nebula|xriver|offline|coinpurse|scan|capture",
         )
 
-        /** 被其它 App 拉起的收银台：支付宝 msp / flybird，微信 OrderHandlerUI / WalletPayUI */
-        private val CASHIER_HINT = Regex("(?i)msp|flybird|cashier|orderhandler|walletpay")
+        /**
+         * 这些页面之后很可能紧跟着一笔付款，看到就打开付款窗口：
+         * 被其它 App 拉起的收银台（支付宝 msp / flybird，微信 OrderHandlerUI / WalletPayUI），
+         * 扫一扫（微信 BaseScanUI、支付宝 MainCaptureActivity），付款码（微信 WalletOfflineCoinPurseUI、支付宝 onsitepay）。
+         */
+        private val CASHIER_HINT = Regex("(?i)msp|flybird|cashier|orderhandler|walletpay|scan|capture|offline|coinpurse|onsitepay")
 
         /** 付款窗口里不需要看的系统界面 */
         private val SKIP_PKG = Regex("(?i)systemui|inputmethod|keyboard|launcher|^android$|com\\.android\\.settings")

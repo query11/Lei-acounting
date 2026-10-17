@@ -2,31 +2,28 @@
 
 package com.lei.accounting.ui
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,8 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lei.accounting.core.model.BillType
 import com.lei.accounting.core.model.CaptureSource
@@ -45,19 +42,7 @@ import com.lei.accounting.core.rule.Categories
 import com.lei.accounting.data.AiStatus
 import com.lei.accounting.data.BillEntity
 
-private val Green = Color(0xFF2E7D32)
-
-@Composable
-fun LeiTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val context = LocalContext.current
-    val scheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> darkColorScheme(primary = Color(0xFF81C784))
-        else -> lightColorScheme(primary = Green)
-    }
-    MaterialTheme(colorScheme = scheme, content = content)
-}
+private val tabTitles = listOf("Lei记账", "收支统计", "设置")
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -75,21 +60,35 @@ fun AppRoot(vm: MainViewModel) {
         }
 
         Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(title = { Text(listOf("Lei记账", "收支统计", "设置")[tab]) })
+                TopAppBar(
+                    title = { Text(tabTitles[tab], fontWeight = FontWeight.Bold) },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
             },
             bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("账单") })
-                    NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Default.DateRange, null) }, label = { Text("统计") })
-                    NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Settings, null) }, label = { Text("设置") })
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest, tonalElevation = 0.dp) {
+                    val itemColors = NavigationBarItemDefaults.colors(
+                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                    )
+                    NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("账单") }, colors = itemColors)
+                    NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.Default.DateRange, null) }, label = { Text("统计") }, colors = itemColors)
+                    NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Settings, null) }, label = { Text("设置") }, colors = itemColors)
                 }
             },
             floatingActionButton = {
                 if (tab == 0) {
-                    FloatingActionButton(onClick = { vm.edit(newManualBill()) }) {
-                        Icon(Icons.Default.Add, contentDescription = "记一笔")
-                    }
+                    ExtendedFloatingActionButton(
+                        onClick = { vm.edit(newManualBill()) },
+                        icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                        text = { Text("记一笔") },
+                        shape = RoundedCornerShape(18.dp),
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    )
                 }
             },
             snackbarHost = { SnackbarHost(snackbar) },
@@ -104,7 +103,7 @@ fun AppRoot(vm: MainViewModel) {
         }
 
         editing?.let { bill ->
-            BillEditDialog(
+            BillEditSheet(
                 bill = bill,
                 onDismiss = { vm.edit(null) },
                 onSave = vm::save,

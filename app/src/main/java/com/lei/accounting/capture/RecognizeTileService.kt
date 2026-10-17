@@ -6,7 +6,6 @@ import android.os.Build
 import android.provider.Settings
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import android.widget.Toast
 
 /**
  * 下拉通知栏里的「识别记账」快捷开关。
@@ -24,17 +23,17 @@ class RecognizeTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val service = PayPageService.instance
-        if (service == null) {
-            Toast.makeText(this, "请先开启「Lei记账 · 支付页面识别」无障碍服务", Toast.LENGTH_LONG).show()
-            openAccessibilitySettings()
-            return
-        }
-        service.recognizeNow()
+        val intent = if (PayPageService.instance == null) {
+            CaptureLog.add(this, CaptureLog.MANUAL, null, "点击了「识别记账」，但无障碍服务没开")
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        } else {
+            // 先打开透明页面：系统会收起通知栏，页面关闭后回到刚才的 App 再识别
+            Intent(this, RecognizeTrampolineActivity::class.java)
+        }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        collapseAndStart(intent)
     }
 
-    private fun openAccessibilitySettings() {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    private fun collapseAndStart(intent: Intent) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startActivityAndCollapse(
                 PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT),

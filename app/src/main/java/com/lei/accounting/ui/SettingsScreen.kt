@@ -8,22 +8,28 @@ import android.content.Intent
 import android.graphics.drawable.Icon as DrawableIcon
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,11 +45,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lei.accounting.BuildConfig
 import com.lei.accounting.R
 import com.lei.accounting.ai.SummaryWorker
 import com.lei.accounting.capture.RecognizeTileService
@@ -68,183 +79,245 @@ fun SettingsScreen(vm: MainViewModel) {
     val notifOk = remember(refresh) { SystemStatus.notificationListenerEnabled(context) }
     val a11yOk = remember(refresh) { SystemStatus.accessibilityEnabled(context) }
     val batteryOk = remember(refresh) { SystemStatus.ignoringBatteryOptimizations(context) }
+    var showLogs by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("自动记账权限", style = MaterialTheme.typography.titleMedium)
-        PermissionCard(
-            title = "① 通知使用权",
-            desc = "读取「微信支付」「支付宝」的到账/扣款通知。最省电，建议必开。",
-            ok = notifOk,
-            action = "去开启",
-        ) { SystemStatus.openNotificationListenerSettings(context) }
-        PermissionCard(
-            title = "② 无障碍：支付页面识别",
-            desc = "在「支付成功」页面读取金额和商户，只监听微信、支付宝。读不到文字时会截一张图在本机 OCR。" +
-                "在「设置 → 无障碍 → 已下载的应用」里找到「Lei记账 · 支付页面识别」打开。",
-            ok = a11yOk,
-            action = "去开启",
-        ) { SystemStatus.openAccessibilitySettings(context) }
-        PermissionCard(
-            title = "③ 忽略电池优化",
-            desc = "防止 Flyme 在锁屏后冻结本 App。本 App 没有常驻前台服务，开了也基本不耗电。",
-            ok = batteryOk,
-            action = "去设置",
-        ) { SystemStatus.requestIgnoreBatteryOptimizations(context) }
-        PermissionCard(
-            title = "④ 魅族后台管理",
-            desc = "Flyme：手机管家 → 权限管理 → 后台管理 → Lei记账 → 允许后台运行；同时打开「自启动」。" +
-                "（不同版本菜单名字可能略有不同）",
-            ok = null,
-            action = "打开手机管家",
-        ) { SystemStatus.openFlymeBackgroundSettings(context) }
-        Text(
-            "提示：如果无障碍或通知使用权的开关是灰色、提示「受限设置」，请到「应用详情 → 右上角 ⋮ → 允许受限设置」后再开启。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        TextButton(onClick = { SystemStatus.openAppDetails(context) }) { Text("打开应用详情") }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Spacer(Modifier.height(0.dp))
 
-        Text("漏记了怎么办", style = MaterialTheme.typography.titleMedium)
-        NotificationTipsCard(latestNotification?.let { l ->
-            val minutes = (System.currentTimeMillis() - l.time) / 60_000
-            val ago = when {
-                minutes < 1 -> "刚刚"
-                minutes < 60 -> "$minutes 分钟前"
-                minutes < 24 * 60 -> "${minutes / 60} 小时前"
-                else -> "${minutes / (24 * 60)} 天前"
+        SectionCard("自动识别") {
+            SettingRow("🔔", "通知使用权", "读取微信支付、支付宝的扣款和到账通知", onClick = { SystemStatus.openNotificationListenerSettings(context) }) {
+                StatusChip(notifOk)
             }
-            "最近一次收到：$ago · ${l.pkg} · ${l.result}"
-        } ?: "还没收到过微信/支付宝的任何通知（通知监听刚开启、或通知被关掉了）")
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("⑥ 下拉快捷开关「识别记账」", style = MaterialTheme.typography.titleSmall)
+            RowDivider()
+            SettingRow(
+                "👀",
+                "无障碍 · 支付页面识别",
+                "读取支付成功页和收银台；读不到文字时在本机截图识别",
+                onClick = { SystemStatus.openAccessibilitySettings(context) },
+            ) { StatusChip(a11yOk) }
+            RowDivider()
+            SettingRow("🔋", "忽略电池优化", "防止锁屏后被 Flyme 冻结", onClick = { SystemStatus.requestIgnoreBatteryOptimizations(context) }) {
+                StatusChip(batteryOk)
+            }
+            RowDivider()
+            SettingRow("📱", "魅族后台运行", "手机管家 → 权限管理 → 后台管理 → 允许后台运行，并打开自启动", onClick = {
+                SystemStatus.openFlymeBackgroundSettings(context)
+            }) { Chevron() }
+            Text(
+                "开关是灰色、提示「受限设置」时：应用详情 → 右上角 ⋮ → 允许受限设置。",
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { SystemStatus.openAppDetails(context) }, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)) {
+                Text("打开应用详情")
+            }
+        }
+
+        SectionCard("漏记了怎么办") {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("微信 / 支付宝的通知不要关", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 Text(
-                    "不依赖通知。付完款停在「支付成功」页面，下拉通知栏点一下「识别记账」就能记上。" +
-                        "添加方法：下拉通知栏 → 编辑（铅笔图标）→ 把「识别记账」拖到上面。",
+                    "系统「免打扰」没关系，照样能读到。但如果在微信里把「微信支付」设成了消息免打扰，" +
+                        "或在系统里关掉了微信/支付宝的通知，它们就不发通知了。不想被打扰就设成「静默、不弹横幅」。",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text(
+                    latestNotification?.let { l ->
+                        val minutes = (System.currentTimeMillis() - l.time) / 60_000
+                        val ago = when {
+                            minutes < 1 -> "刚刚"
+                            minutes < 60 -> "$minutes 分钟前"
+                            minutes < 24 * 60 -> "${minutes / 60} 小时前"
+                            else -> "${minutes / (24 * 60)} 天前"
+                        }
+                        "最近收到：$ago · ${l.pkg} · ${l.result}"
+                    } ?: "还没收到过微信/支付宝的通知",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { SystemStatus.openAppNotificationSettings(context, PayApp.WECHAT.pkg) }) { Text("微信通知") }
+                    OutlinedButton(onClick = { SystemStatus.openAppNotificationSettings(context, PayApp.ALIPAY.pkg) }) { Text("支付宝通知") }
+                }
+            }
+            RowDivider()
+            SettingRow("⚡", "下拉快捷开关「识别记账」", "停在支付成功页或订单页，下拉点一下就记上") {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    TextButton(onClick = { requestAddTile(context) }) { Text("一键添加到下拉菜单") }
+                    FilledTonalButton(onClick = { requestAddTile(context) }) { Text("添加") }
+                }
+            }
+            RowDivider()
+            var captureLog by remember { mutableStateOf(prefs.captureLog) }
+            ToggleRow("📝", "记录识别日志", "只存本机，最多 500 条", captureLog) {
+                captureLog = it
+                prefs.captureLog = it
+            }
+            RowDivider()
+            SettingRow("🔍", "查看识别日志", "收到了哪些通知、读到了哪些页面", onClick = { showLogs = true }) { Chevron() }
+        }
+
+        SectionCard("后台与提醒") {
+            var hide by remember { mutableStateOf(prefs.hideFromRecents) }
+            ToggleRow("🙈", "在最近任务中隐藏", "看不到后台卡片，识别照常工作", hide) {
+                hide = it
+                prefs.hideFromRecents = it
+                (context as? Activity)?.let { a -> MainActivity.applyHideFromRecents(a) }
+            }
+            RowDivider()
+            var notifyRecord by remember { mutableStateOf(prefs.notifyOnRecord) }
+            ToggleRow("✅", "记账成功提示", "记下一笔后弹一条静默通知，点开可修改", notifyRecord) {
+                notifyRecord = it
+                prefs.notifyOnRecord = it
+            }
+            RowDivider()
+            var ocr by remember { mutableStateOf(prefs.ocrFallback) }
+            ToggleRow("📷", "截图识别兜底", "页面读不到文字时截图 + 本机识别，不上传图片", ocr) {
+                ocr = it
+                prefs.ocrFallback = it
+            }
+            RowDivider()
+            var summaryNotify by remember { mutableStateOf(prefs.summaryNotify) }
+            ToggleRow("📊", "定时推送总结", "每天日报，周日周报，月末月报", summaryNotify) {
+                summaryNotify = it
+                prefs.summaryNotify = it
+            }
+            RowDivider()
+            var hour by remember { mutableIntStateOf(prefs.summaryHour) }
+            SettingRow("⏰", "推送时间", "每天 $hour:00") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StepButton("−") {
+                        hour = (hour + 23) % 24
+                        prefs.summaryHour = hour
+                        SummaryWorker.schedule(context, replace = true)
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    StepButton("+") {
+                        hour = (hour + 1) % 24
+                        prefs.summaryHour = hour
+                        SummaryWorker.schedule(context, replace = true)
+                    }
                 }
             }
         }
-        var captureLog by remember { mutableStateOf(prefs.captureLog) }
-        SwitchRow("记录识别日志", "记下收到了哪些通知、读到了哪些页面，方便排查漏记（只存本机，最多 500 条）", captureLog) {
-            captureLog = it
-            prefs.captureLog = it
-        }
-        var showLogs by remember { mutableStateOf(false) }
-        OutlinedButton(onClick = { showLogs = true }) { Text("查看识别日志") }
-        if (showLogs) CaptureLogDialog(vm) { showLogs = false }
 
-        Text("后台与提醒", style = MaterialTheme.typography.titleMedium)
-        var hide by remember { mutableStateOf(prefs.hideFromRecents) }
-        SwitchRow("在最近任务中隐藏", "隐藏后台卡片，识别功能照常工作", hide) {
-            hide = it
-            prefs.hideFromRecents = it
-            (context as? Activity)?.let { MainActivity.applyHideFromRecents(it) }
-        }
-        var notifyRecord by remember { mutableStateOf(prefs.notifyOnRecord) }
-        SwitchRow("记账成功提示", "记下一笔后弹一条静默通知，点开可修改", notifyRecord) {
-            notifyRecord = it
-            prefs.notifyOnRecord = it
-        }
-        var ocr by remember { mutableStateOf(prefs.ocrFallback) }
-        SwitchRow("截图识别兜底", "页面读不到文字时截图 + 本机 OCR（不上传图片）", ocr) {
-            ocr = it
-            prefs.ocrFallback = it
-        }
-        var summaryNotify by remember { mutableStateOf(prefs.summaryNotify) }
-        SwitchRow("定时推送总结", "每天推送日报，周日推送周报，月末推送月报", summaryNotify) {
-            summaryNotify = it
-            prefs.summaryNotify = it
-        }
-        var hour by remember { mutableIntStateOf(prefs.summaryHour) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("推送时间：每天 $hour:00", Modifier.weight(1f))
-            OutlinedButton(onClick = { hour = (hour + 23) % 24 }) { Text("-") }
-            Spacer(Modifier.padding(4.dp))
-            OutlinedButton(onClick = { hour = (hour + 1) % 24 }) { Text("+") }
-            Spacer(Modifier.padding(4.dp))
-            Button(onClick = {
-                prefs.summaryHour = hour
-                SummaryWorker.schedule(context, replace = true)
-            }) { Text("保存") }
+        SectionCard("DeepSeek 智能识别") {
+            var aiOn by remember { mutableStateOf(prefs.aiEnabled) }
+            ToggleRow("✨", "启用 AI 分类与总结", "只发送金额、商户等短文本，长数字已打码，不发截图", aiOn) {
+                aiOn = it
+                prefs.aiEnabled = it
+            }
+            var key by remember { mutableStateOf(prefs.apiKey) }
+            var model by remember { mutableStateOf(prefs.model) }
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("API Key（sk-...）") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = model,
+                    onValueChange = { model = it },
+                    label = { Text("模型") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        prefs.apiKey = key
+                        prefs.model = model
+                        vm.retryPendingAi()
+                        Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                    }) { Text("保存") }
+                    OutlinedButton(onClick = { vm.testApi(key, model) }, enabled = !busy && key.isNotBlank()) { Text("测试连接") }
+                }
+                Text(
+                    "在 platform.deepseek.com 创建 API Key 并充值几块钱即可，一个月通常不到 1 元。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
-        Text("DeepSeek 智能识别", style = MaterialTheme.typography.titleMedium)
-        var aiOn by remember { mutableStateOf(prefs.aiEnabled) }
-        SwitchRow("启用 AI 分类与总结", "只发送金额、商户等短文本（长数字已打码），不发截图", aiOn) {
-            aiOn = it
-            prefs.aiEnabled = it
+        SectionCard("数据") {
+            SettingRow("📤", "导出全部账单", "CSV 格式，可发到电脑用表格打开", onClick = {
+                scope.launch {
+                    val csv = vm.exportCsv()
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Lei记账导出.csv")
+                        putExtra(Intent.EXTRA_TEXT, csv)
+                    }
+                    context.startActivity(Intent.createChooser(send, "导出账单"))
+                }
+            }) { Chevron() }
         }
-        var key by remember { mutableStateOf(prefs.apiKey) }
-        var model by remember { mutableStateOf(prefs.model) }
-        OutlinedTextField(
-            value = key,
-            onValueChange = { key = it },
-            label = { Text("API Key（sk-...）") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = model,
-            onValueChange = { model = it },
-            label = { Text("模型") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                prefs.apiKey = key
-                prefs.model = model
-                vm.retryPendingAi()
-            }) { Text("保存") }
-            OutlinedButton(onClick = { vm.testApi(key, model) }, enabled = !busy && key.isNotBlank()) { Text("测试连接") }
-        }
+
         Text(
-            "在 platform.deepseek.com 创建 API Key 并充值几块钱即可。每笔账单分类约几百 token，一个月花费通常不到 1 元。",
-            style = MaterialTheme.typography.bodySmall,
+            "Lei记账 v${BuildConfig.VERSION_NAME}",
+            Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
+    }
 
-        Text("数据", style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = {
-            scope.launch {
-                val csv = vm.exportCsv()
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "Lei记账导出.csv")
-                    putExtra(Intent.EXTRA_TEXT, csv)
-                }
-                context.startActivity(Intent.createChooser(send, "导出账单"))
-            }
-        }) { Text("导出全部账单（CSV）") }
-        Spacer(Modifier.height(24.dp))
+    if (showLogs) CaptureLogDialog(vm) { showLogs = false }
+}
+
+/** 设置项：左侧 emoji 图标 + 标题 + 说明，右侧放状态 / 开关 / 箭头 */
+@Composable
+private fun SettingRow(
+    emoji: String,
+    title: String,
+    desc: String,
+    onClick: (() -> Unit)? = null,
+    trailing: @Composable () -> Unit = {},
+) {
+    ListItem(
+        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium) },
+        supportingContent = { Text(desc, style = MaterialTheme.typography.bodySmall) },
+        leadingContent = { Text(emoji, fontSize = 22.sp) },
+        trailingContent = trailing,
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+    )
+}
+
+@Composable
+private fun ToggleRow(emoji: String, title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    SettingRow(emoji, title, desc, onClick = { onChange(!checked) }) {
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
 @Composable
-private fun NotificationTipsCard(status: String) {
-    val context = LocalContext.current
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("⑤ 微信 / 支付宝的通知不要关", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "系统的「免打扰」没关系，通知照样能读到。但下面两种情况 App 根本不发通知，就收不到：\n" +
-                    "· 在微信里把「微信支付」公众号设成了「消息免打扰」→ 打开微信支付公众号 → 右上角 ··· → 关掉消息免打扰；\n" +
-                    "· 在系统通知管理里关掉了微信或支付宝的通知。\n" +
-                    "不想被打扰的话，把通知设成「静默 / 不弹横幅 / 不响铃」即可，不要直接关掉。",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(status, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            Row {
-                TextButton(onClick = { SystemStatus.openAppNotificationSettings(context, PayApp.WECHAT.pkg) }) { Text("微信通知设置") }
-                TextButton(onClick = { SystemStatus.openAppNotificationSettings(context, PayApp.ALIPAY.pkg) }) { Text("支付宝通知设置") }
-            }
-        }
-    }
+private fun RowDivider() = HorizontalDivider(Modifier.padding(start = 56.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+@Composable
+private fun Chevron() = Icon(
+    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+    contentDescription = null,
+    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+)
+
+@Composable
+private fun StepButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier.width(40.dp).height(36.dp),
+    ) { Text(text, style = MaterialTheme.typography.titleMedium) }
 }
 
 /** Android 13+：弹出系统对话框，一键把「识别记账」加到下拉快捷开关 */
@@ -260,36 +333,5 @@ private fun requestAddTile(context: Context) {
         ) { }
     }.onFailure {
         Toast.makeText(context, "这个系统不支持一键添加，请在下拉菜单的编辑页里手动拖进来", Toast.LENGTH_LONG).show()
-    }
-}
-
-@Composable
-private fun PermissionCard(title: String, desc: String, ok: Boolean?, action: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                when (ok) {
-                    true -> Icon(Icons.Default.CheckCircle, contentDescription = "已开启", tint = IncomeColor)
-                    false -> Icon(Icons.Default.Warning, contentDescription = "未开启", tint = MaterialTheme.colorScheme.error)
-                    null -> Unit
-                }
-            }
-            Text(desc, style = MaterialTheme.typography.bodySmall)
-            if (ok != true) {
-                TextButton(onClick = onClick) { Text(action) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SwitchRow(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

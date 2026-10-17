@@ -67,6 +67,17 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!--
+            快捷开关点击后的透明过渡页：单独任务栈（taskAffinity 为空），关闭后回到刚才的 App，而不是 Lei记账 主界面。
+        -->
+        <activity
+            android:name=".capture.RecognizeTrampolineActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- 下拉快捷开关：手动识别当前页面 -->
         <service
             android:name=".capture.RecognizeTileService"
