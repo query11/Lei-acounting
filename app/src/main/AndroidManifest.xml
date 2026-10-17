@@ -8,11 +8,18 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- 只为了读取 微信 / 支付宝 是否已安装 -->
+    <!--
+        微信 / 支付宝 / 魅族手机管家：检测是否安装、跳转设置。
+        桌面上的 App：线上付款跳回购物 App 时，用它的名字（淘宝、美团…）作为商户名。
+    -->
     <queries>
         <package android:name="com.tencent.mm" />
         <package android:name="com.eg.android.AlipayGphone" />
         <package android:name="com.meizu.safe" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application

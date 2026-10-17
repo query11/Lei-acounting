@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.lei.accounting.R
+import com.lei.accounting.core.model.PayApp
 import com.lei.accounting.core.model.formatYuan
 import com.lei.accounting.data.BillEntity
 import com.lei.accounting.data.SummaryEntity
@@ -62,6 +63,32 @@ object Notifier {
             .setTimeoutAfter(60 * 60_000L)
             .build()
         NotificationManagerCompat.from(context).notify(("bill" + bill.id).hashCode(), n)
+    }
+
+    /** 看到了收银台但没确认支付成功、通知里也没有：提醒用户补记，点开就是填好金额的记账框 */
+    fun possiblyMissed(context: Context, payApp: PayApp, amountCents: Long, merchant: String, time: Long) {
+        if (!canPost(context)) return
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(MainActivity.EXTRA_PREFILL_AMOUNT, amountCents)
+            .putExtra(MainActivity.EXTRA_PREFILL_APP, payApp.name)
+            .putExtra(MainActivity.EXTRA_PREFILL_MERCHANT, merchant)
+            .putExtra(MainActivity.EXTRA_PREFILL_TIME, time)
+        val pi = PendingIntent.getActivity(
+            context,
+            ("missed$time").hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val where = if (merchant.isNotBlank()) "在「$merchant」" else ""
+        val n = NotificationCompat.Builder(context, CH_SUMMARY)
+            .setSmallIcon(R.drawable.ic_stat_bill)
+            .setContentTitle("可能漏记了一笔 ¥${amountCents.formatYuan()}")
+            .setContentText("刚才${where}用${payApp.label}付款，但没看到支付成功。付了的话点这里记一笔")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(context).notify(("missed$time").hashCode(), n)
     }
 
     fun summary(context: Context, s: SummaryEntity) {

@@ -9,7 +9,10 @@ import com.lei.accounting.ai.SummaryGenerator
 import com.lei.accounting.capture.CaptureLog
 import com.lei.accounting.core.ai.ChatPrompt
 import com.lei.accounting.core.model.BillType
+import com.lei.accounting.core.model.CaptureSource
+import com.lei.accounting.core.model.PayApp
 import com.lei.accounting.core.model.formatYuan
+import com.lei.accounting.core.rule.Categories
 import com.lei.accounting.core.summary.DateRange
 import com.lei.accounting.core.summary.Period
 import com.lei.accounting.core.summary.Summary
@@ -117,13 +120,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _editing.value = repo.bills.get(id)
     }
 
+    /** 「可能漏记」提醒点进来：打开一个填好金额的记账框，用户确认后才保存 */
+    fun prefill(amountCents: Long, appName: String, merchant: String, time: Long) {
+        val app = runCatching { PayApp.valueOf(appName) }.getOrDefault(PayApp.MANUAL)
+        _editing.value = BillEntity(
+            amountCents = amountCents,
+            type = BillType.EXPENSE.name,
+            category = Categories.guess(BillType.EXPENSE, merchant),
+            merchant = merchant,
+            app = app.name,
+            sources = CaptureSource.MANUAL.name,
+            time = time,
+            aiStatus = AiStatus.USER_EDITED,
+        )
+    }
+
     fun edit(bill: BillEntity?) {
         _editing.value = bill
     }
 
     fun save(bill: BillEntity) = viewModelScope.launch {
         if (bill.id == 0L) {
-            repo.saveManual(bill.amountCents, bill.billType, bill.category, bill.merchant, bill.note, bill.time)
+            repo.saveManual(bill.amountCents, bill.billType, bill.category, bill.merchant, bill.note, bill.time, bill.payApp)
         } else {
             repo.bills.update(bill.copy(aiStatus = AiStatus.USER_EDITED))
         }

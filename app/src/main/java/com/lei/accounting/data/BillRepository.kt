@@ -68,7 +68,15 @@ class BillRepository private constructor(context: Context) {
         SaveResult.Inserted(entity.copy(id = id))
     }
 
-    suspend fun saveManual(amountCents: Long, type: BillType, category: String, merchant: String, note: String, time: Long): Long =
+    suspend fun saveManual(
+        amountCents: Long,
+        type: BillType,
+        category: String,
+        merchant: String,
+        note: String,
+        time: Long,
+        app: PayApp = PayApp.MANUAL,
+    ): Long =
         bills.insert(
             BillEntity(
                 amountCents = amountCents,
@@ -76,7 +84,7 @@ class BillRepository private constructor(context: Context) {
                 category = category,
                 merchant = merchant,
                 note = note,
-                app = PayApp.MANUAL.name,
+                app = app.name,
                 sources = CaptureSource.MANUAL.name,
                 time = time,
                 aiStatus = AiStatus.USER_EDITED,
