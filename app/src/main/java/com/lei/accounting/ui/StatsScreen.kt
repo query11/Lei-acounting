@@ -41,7 +41,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -215,6 +217,7 @@ private fun DailyBarChart(s: Summary) {
     val max = values.maxOrNull()?.takeIf { it > 0 } ?: 1L
     val defaultIdx = values.indices.maxByOrNull { values[it] }?.takeIf { values[it] > 0 } ?: -1
     var selected by remember(s.range, values) { mutableIntStateOf(defaultIdx) }
+    val textMeasurer = rememberTextMeasurer()
     // 换周期时柱子从基线长出来
     val grow = remember(s.range) { Animatable(0f) }
     LaunchedEffect(s.range) { grow.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
@@ -262,22 +265,20 @@ private fun DailyBarChart(s: Summary) {
             drawLine(baseline, Offset(0f, chartHeight), Offset(size.width, chartHeight), strokeWidth = 1.dp.toPx())
         }
         Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth()) {
+        // 横轴标签直接画在画布上：月视图每格很窄，用 Text 会被截断
+        val labelStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val selectedStyle = labelStyle.copy(color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+        Canvas(Modifier.fillMaxWidth().height(16.dp)) {
+            val slot = size.width / days.size
             days.forEachIndexed { i, day ->
                 val label = when {
                     s.range.period == Period.WEEK -> weekdayNames[day.dayOfWeek.value - 1]
                     day.dayOfMonth == 1 || day.dayOfMonth % 5 == 0 -> "${day.dayOfMonth}"
-                    else -> ""
+                    else -> return@forEachIndexed
                 }
-                Text(
-                    label,
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (i == selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    softWrap = false,
-                )
+                val layout = textMeasurer.measure(label, if (i == selected) selectedStyle else labelStyle)
+                val x = (i * slot + slot / 2 - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)
+                drawText(layout, topLeft = Offset(x, 0f))
             }
         }
     }

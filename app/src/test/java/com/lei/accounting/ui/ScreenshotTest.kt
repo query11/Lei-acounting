@@ -4,7 +4,13 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isRoot
@@ -165,9 +171,13 @@ class ScreenshotTest {
     }
 
     @Test
-    fun editSheet() = shot("7_edit_sheet", topmostWindow = true) {
+    fun editSheet() = shot("7_edit_form") {
         LeiTheme {
-            BillEditSheet(bill = sample[1], onDismiss = {}, onSave = {}, onDelete = {}, onReclassify = {})
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest) {
+                Column(Modifier.padding(top = 24.dp)) {
+                    BillEditForm(bill = sample[1], onSave = {}, onDelete = {}, onReclassify = {})
+                }
+            }
         }
     }
 }

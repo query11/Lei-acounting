@@ -177,23 +177,25 @@ private fun MiniTrend(s: Summary, modifier: Modifier = Modifier) {
     val today = LocalDate.now()
     val grow = remember(s.range) { Animatable(0f) }
     LaunchedEffect(s.range) { grow.animateTo(1f, tween(700, delayMillis = 150, easing = FastOutSlowInEasing)) }
-    val width = if (days.size > 10) 124.dp else 96.dp
+    val width = if (days.size > 10) 140.dp else 96.dp
     Canvas(modifier.size(width = width, height = 44.dp)) {
         val slot = size.width / days.size
         val gap = if (days.size > 10) 1.5.dp.toPx() else 4.dp.toPx()
         val barW = (slot - gap).coerceAtLeast(1.dp.toPx())
         val r = (barW / 2).coerceAtMost(2.dp.toPx())
+        // 一条实线基线代替零值小短柱（短柱连起来会像虚线，反而显乱）
+        drawLine(
+            Color.White.copy(alpha = 0.22f),
+            Offset(0f, size.height - 0.5.dp.toPx()),
+            Offset(size.width, size.height - 0.5.dp.toPx()),
+            strokeWidth = 1.dp.toPx(),
+        )
         days.forEachIndexed { i, day ->
             val v = values[i]
-            val h = if (v > 0) (v.toFloat() / max * size.height * grow.value).coerceAtLeast(3.dp.toPx()) else 2.dp.toPx()
-            val alpha = when {
-                day == today -> 0.95f
-                day > today -> 0.12f
-                v > 0 -> 0.42f
-                else -> 0.18f
-            }
+            if (v <= 0) return@forEachIndexed
+            val h = (v.toFloat() / max * size.height * grow.value).coerceAtLeast(3.dp.toPx())
             drawRoundRect(
-                Color.White.copy(alpha = alpha),
+                Color.White.copy(alpha = if (day == today) 0.95f else 0.45f),
                 topLeft = Offset(i * slot + (slot - barW) / 2, size.height - h),
                 size = Size(barW, h),
                 cornerRadius = CornerRadius(r, r),

@@ -69,6 +69,23 @@ fun BillEditSheet(
     onDelete: (BillEntity) -> Unit,
     onReclassify: (BillEntity) -> Unit,
 ) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        BillEditForm(bill, onSave, onDelete, onReclassify)
+    }
+}
+
+/** 记账表单本体（底部弹窗里的内容），单独拆出来方便预览 */
+@Composable
+fun BillEditForm(
+    bill: BillEntity,
+    onSave: (BillEntity) -> Unit,
+    onDelete: (BillEntity) -> Unit,
+    onReclassify: (BillEntity) -> Unit,
+) {
     val isNew = bill.id == 0L
     var amountText by remember(bill.id) { mutableStateOf(if (bill.amountCents > 0) bill.amountCents.formatYuan() else "") }
     var type by remember(bill.id) { mutableStateOf(bill.billType) }
@@ -79,11 +96,7 @@ fun BillEditSheet(
     val amountCents = parseAmountInput(amountText)
     val canSave = amountCents != null && amountCents > 0
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-    ) {
+    run {
         Column(
             Modifier
                 .fillMaxWidth()

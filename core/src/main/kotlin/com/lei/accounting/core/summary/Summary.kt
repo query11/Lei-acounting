@@ -82,7 +82,7 @@ data class Summary(
     fun toPlainText(): String = buildString {
         append("${range.title}：支出 ¥${totalExpense.formatYuanGrouped()}")
         if (totalIncome > 0) append("，收入 ¥${totalIncome.formatYuanGrouped()}")
-        append("，共 ${count} 笔。")
+        append("，共\u00A0${count}\u00A0笔。")
         expenseChangePct?.let { pct ->
             val unit = when (range.period) { Period.DAY -> "昨天"; Period.WEEK -> "上周"; Period.MONTH -> "上月" }
             append(if (pct >= 0) "比${unit}多 $pct%。" else "比${unit}少 ${-pct}%。")
