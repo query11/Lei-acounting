@@ -2,6 +2,7 @@ package com.lei.accounting.data
 
 import android.content.Context
 import com.lei.accounting.core.dedup.BillMerger
+import com.lei.accounting.core.io.ImportedBill
 import com.lei.accounting.core.model.BillType
 import com.lei.accounting.core.model.CaptureSource
 import com.lei.accounting.core.model.ParsedBill
@@ -38,6 +39,7 @@ class BillRepository private constructor(context: Context) {
             val newMerchant = merged.merchant != old.merchant
             val updated = old.copy(
                 sources = BillMerger.encodeSources(merged.sources),
+                app = merged.app.name,
                 merchant = merged.merchant,
                 payMethod = merged.payMethod,
                 note = merged.note,
@@ -90,6 +92,38 @@ class BillRepository private constructor(context: Context) {
                 aiStatus = AiStatus.USER_EDITED,
             ),
         )
+
+    /**
+     * 导入账单（CSV）。前后 1 分钟内金额、收支都相同的视为已存在，跳过，所以重复导入同一个文件是安全的。
+     * @return 导入条数 to 跳过条数
+     */
+    suspend fun importBills(list: List<ImportedBill>): Pair<Int, Int> = lock.withLock {
+        var added = 0
+        var skipped = 0
+        for (b in list) {
+            val nearby = bills.range(b.timeMillis - 60_000, b.timeMillis + 60_000)
+            if (nearby.any { it.amountCents == b.amountCents && it.type == b.type.name }) {
+                skipped++
+                continue
+            }
+            bills.insert(
+                BillEntity(
+                    amountCents = b.amountCents,
+                    type = b.type.name,
+                    category = Categories.normalize(b.type, b.category),
+                    merchant = b.merchant,
+                    payMethod = b.payMethod,
+                    note = b.note,
+                    app = b.app.name,
+                    sources = CaptureSource.MANUAL.name,
+                    time = b.timeMillis,
+                    aiStatus = AiStatus.USER_EDITED,
+                ),
+            )
+            added++
+        }
+        added to skipped
+    }
 
     suspend fun summary(range: DateRange): Summary {
         val prev = range.previous()

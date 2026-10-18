@@ -34,7 +34,7 @@ object NotificationParser {
         return when (app) {
             PayApp.WECHAT -> parseWechat(t, c, timeMillis)
             PayApp.ALIPAY -> parseAlipay(t, c, timeMillis)
-            PayApp.MANUAL -> null
+            PayApp.BANK, PayApp.MANUAL -> null
         }
     }
 

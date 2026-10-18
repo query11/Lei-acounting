@@ -1,5 +1,8 @@
 package com.lei.accounting.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -26,6 +29,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -55,18 +59,41 @@ fun StatsScreen(vm: MainViewModel) {
     val period by vm.period.collectAsStateWithLifecycle()
     val saved by vm.savedSummary.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    StatsContent(
+        period = period,
+        data = data,
+        aiText = saved?.aiText.orEmpty(),
+        busy = busy,
+        canForward = vm.canGoForward,
+        onPeriod = vm::setPeriod,
+        onShift = vm::shift,
+        onGenerate = { vm.generateSummary() },
+    )
+}
 
+/** 统计页（无状态，方便预览和截图测试） */
+@Composable
+fun StatsContent(
+    period: Period,
+    data: PeriodData?,
+    aiText: String,
+    busy: Boolean,
+    canForward: Boolean,
+    onPeriod: (Period) -> Unit,
+    onShift: (Boolean) -> Unit,
+    onGenerate: () -> Unit,
+) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        Modifier.fillMaxSize().readableWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(0.dp))
-        PillSwitcher(Period.entries, period, { PeriodLabels.getValue(it) }, vm::setPeriod, Modifier.fillMaxWidth())
+        PillSwitcher(Period.entries, period, { PeriodLabels.getValue(it) }, onPeriod, Modifier.fillMaxWidth())
         DateNavigator(
             title = data?.range?.title.orEmpty(),
-            canForward = vm.canGoForward,
-            onPrev = { vm.shift(false) },
-            onNext = { vm.shift(true) },
+            canForward = canForward,
+            onPrev = { onShift(false) },
+            onNext = { onShift(true) },
         )
         val d = data ?: return@Column
         val s = d.summary
@@ -79,10 +106,10 @@ fun StatsScreen(vm: MainViewModel) {
 
         AiSummaryCard(
             localText = s.toPlainText(),
-            aiText = saved?.aiText.orEmpty(),
+            aiText = aiText,
             busy = busy,
             enabled = s.count > 0,
-            onGenerate = vm::generateSummary,
+            onGenerate = onGenerate,
         )
 
         if (s.byCategory.isNotEmpty()) {
@@ -94,7 +121,7 @@ fun StatsScreen(vm: MainViewModel) {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(c.category, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                Text(yuan(c.cents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(yuan(c.cents), style = MaterialTheme.typography.bodyMedium.merge(TabularNumbers), fontWeight = FontWeight.SemiBold)
                             }
                             Spacer(Modifier.height(6.dp))
                             RatioBar(c.ratio.toFloat())
@@ -187,6 +214,9 @@ private fun DailyBarChart(s: Summary) {
     val max = values.maxOrNull()?.takeIf { it > 0 } ?: 1L
     val defaultIdx = values.indices.maxByOrNull { values[it] }?.takeIf { values[it] > 0 } ?: -1
     var selected by remember(s.range, values) { mutableIntStateOf(defaultIdx) }
+    // 换周期时柱子从基线长出来
+    val grow = remember(s.range) { Animatable(0f) }
+    LaunchedEffect(s.range) { grow.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
 
     Column(Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -220,7 +250,7 @@ private fun DailyBarChart(s: Summary) {
             val chartHeight = size.height - 1.dp.toPx()
             values.forEachIndexed { i, v ->
                 if (v <= 0) return@forEachIndexed
-                val h = (v.toFloat() / max * chartHeight).coerceAtLeast(2.dp.toPx())
+                val h = (v.toFloat() / max * chartHeight * grow.value).coerceAtLeast(2.dp.toPx())
                 val left = i * slot + (slot - barWidth) / 2
                 val top = chartHeight - h
                 val color = if (i == selected) lei.chart else lei.chartMuted

@@ -3,6 +3,7 @@ package com.lei.accounting.core.dedup
 import com.lei.accounting.core.model.BillRecord
 import com.lei.accounting.core.model.CaptureSource
 import com.lei.accounting.core.model.ParsedBill
+import com.lei.accounting.core.model.PayApp
 import kotlin.math.abs
 
 /**
@@ -18,10 +19,12 @@ object BillMerger {
 
     fun findDuplicate(new: ParsedBill, recent: List<BillRecord>): BillRecord? =
         recent
-            .filter { it.amountCents == new.amountCents && it.type == new.type && it.app == new.app }
+            .filter { it.amountCents == new.amountCents && it.type == new.type && appsCompatible(it.app, new.app) }
             .filter { old ->
                 val dt = abs(old.timeMillis - new.timeMillis)
-                if (new.source in old.sources) dt <= SAME_SOURCE_WINDOW_MS else dt <= CROSS_SOURCE_WINDOW_MS
+                // 同一个 App 的同一种渠道重复上报才用短窗口；银行短信可能比微信通知晚到一两分钟
+                val sameChannel = new.source in old.sources && old.app == new.app
+                if (sameChannel) dt <= SAME_SOURCE_WINDOW_MS else dt <= CROSS_SOURCE_WINDOW_MS
             }
             .filter { old -> merchantsCompatible(old.merchant, new.merchant) }
             .minByOrNull { abs(it.timeMillis - new.timeMillis) }
@@ -31,10 +34,18 @@ object BillMerger {
         sources = old.sources + new.source,
         merchant = old.merchant.ifBlank { new.merchant },
         payMethod = old.payMethod.ifBlank { new.payMethod },
+        // 银行通知先到、微信/支付宝的记录后到时，以微信/支付宝为准
+        app = if (old.app == PayApp.BANK && new.app != PayApp.BANK) new.app else old.app,
         note = old.note.ifBlank { new.note },
         // 时间以最早捕获的为准
         timeMillis = minOf(old.timeMillis, new.timeMillis),
     )
+
+    /**
+     * 用银行卡在微信/支付宝里付款时，会同时收到微信/支付宝的记录和银行的动账通知，这是同一笔钱。
+     * 所以「银行卡」可以和任何渠道合并；微信和支付宝之间不合并。
+     */
+    private fun appsCompatible(a: PayApp, b: PayApp): Boolean = a == b || a == PayApp.BANK || b == PayApp.BANK
 
     private fun merchantsCompatible(a: String, b: String): Boolean {
         if (a.isBlank() || b.isBlank()) return true

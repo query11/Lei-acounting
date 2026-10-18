@@ -14,8 +14,8 @@ object AmountParser {
 
     private val patterns = listOf(
         Regex("""[¥￥]\s*-?\s*$NUM"""),
-        Regex("""人民币\s*$NUM"""),
-        Regex("""$NUM\s*元"""),
+        Regex("""(?:人民币|RMB|CNY)\s*$NUM"""),
+        Regex("""$NUM\s*(?:元|人民币|RMB|CNY)"""),
     )
 
     /** 金额前面紧挨着这些词时，说明不是交易金额 */

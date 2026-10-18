@@ -10,6 +10,8 @@ enum class BillType(val label: String) {
 enum class PayApp(val pkg: String, val label: String) {
     WECHAT("com.tencent.mm", "微信"),
     ALIPAY("com.eg.android.AlipayGphone", "支付宝"),
+    /** 银行 App / 云闪付 / 银行短信的动账通知 */
+    BANK("", "银行卡"),
     MANUAL("", "手动");
 
     companion object {

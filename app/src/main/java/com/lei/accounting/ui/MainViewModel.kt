@@ -1,6 +1,7 @@
 package com.lei.accounting.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lei.accounting.ai.AiClassifyWorker
@@ -8,6 +9,7 @@ import com.lei.accounting.ai.DeepSeekClient
 import com.lei.accounting.ai.SummaryGenerator
 import com.lei.accounting.capture.CaptureLog
 import com.lei.accounting.core.ai.ChatPrompt
+import com.lei.accounting.core.io.CsvCodec
 import com.lei.accounting.core.model.BillType
 import com.lei.accounting.core.model.CaptureSource
 import com.lei.accounting.core.model.PayApp
@@ -27,6 +29,7 @@ import com.lei.accounting.data.billType
 import com.lei.accounting.data.payApp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,6 +40,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class PeriodData(
     val range: DateRange,
@@ -198,15 +202,59 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (prefs.aiReady) AiClassifyWorker.enqueue(getApplication())
     }
 
-    /** 导出全部账单为 CSV 文本 */
+    /** 导出全部账单为 CSV 文本（带 BOM，Excel 打开不乱码） */
     suspend fun exportCsv(): String {
         val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         val rows = repo.bills.all().map { b ->
             val t = SummaryCalculator.localDateTime(b.time).format(fmt)
             val amount = (if (b.billType == BillType.EXPENSE) "-" else "") + b.amountCents.formatYuan()
-            listOf(t, b.billType.label, amount, b.category, b.merchant, b.note, b.payApp.label, b.payMethod)
-                .joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }
+            CsvCodec.encodeRow(listOf(t, b.billType.label, amount, b.category, b.merchant, b.note, b.payApp.label, b.payMethod))
         }
-        return (listOf("时间,收支,金额,分类,商户,备注,来源,支付方式") + rows).joinToString("\n")
+        return "\uFEFF" + (listOf(CsvCodec.HEADER.joinToString(",")) + rows).joinToString("\n")
+    }
+
+    /** 导出到用户选择的文件 */
+    fun exportCsvTo(uri: Uri) = viewModelScope.launch {
+        val app = getApplication<Application>()
+        val result = runCatching {
+            val csv = exportCsv()
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                    ?: error("无法写入文件")
+            }
+        }
+        _message.value = if (result.isSuccess) "已导出 ${repo.bills.all().size} 笔账单" else "导出失败：${result.exceptionOrNull()?.message}"
+    }
+
+    /** 从文件导入 */
+    fun importFrom(uri: Uri) = viewModelScope.launch {
+        val app = getApplication<Application>()
+        val text = runCatching {
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+            }
+        }.getOrNull()
+        if (text.isNullOrBlank()) {
+            _message.value = "读不到这个文件"
+            return@launch
+        }
+        importText(text)
+    }
+
+    fun importPasted(text: String) = viewModelScope.launch { importText(text) }
+
+    /** 从粘贴的文本导入（旧版本「分享导出」的内容） */
+    suspend fun importText(text: String) {
+        val parsed = CsvCodec.decode(text)
+        if (parsed.bills.isEmpty()) {
+            _message.value = "没有找到可导入的账单" + if (parsed.badLines > 0) "（${parsed.badLines} 行格式不对）" else ""
+            return
+        }
+        val (added, skipped) = repo.importBills(parsed.bills)
+        _message.value = buildString {
+            append("导入 $added 笔")
+            if (skipped > 0) append("，跳过 $skipped 笔重复")
+            if (parsed.badLines > 0) append("，${parsed.badLines} 行无法识别")
+        }
     }
 }

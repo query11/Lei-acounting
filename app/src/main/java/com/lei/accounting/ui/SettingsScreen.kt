@@ -8,6 +8,8 @@ import android.content.Intent
 import android.graphics.drawable.Icon as DrawableIcon
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -61,6 +64,7 @@ import com.lei.accounting.capture.RecognizeTileService
 import com.lei.accounting.core.model.PayApp
 import com.lei.accounting.system.SystemStatus
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
@@ -80,6 +84,13 @@ fun SettingsScreen(vm: MainViewModel) {
     val a11yOk = remember(refresh) { SystemStatus.accessibilityEnabled(context) }
     val batteryOk = remember(refresh) { SystemStatus.ignoringBatteryOptimizations(context) }
     var showLogs by remember { mutableStateOf(false) }
+    var showPaste by remember { mutableStateOf(false) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri?.let(vm::exportCsvTo)
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(vm::importFrom)
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -249,7 +260,17 @@ fun SettingsScreen(vm: MainViewModel) {
         }
 
         SectionCard("数据") {
-            SettingRow("📤", "导出全部账单", "CSV 格式，可发到电脑用表格打开", onClick = {
+            SettingRow("💾", "导出为 CSV 文件", "保存到手机里，换机或重装前先备份一下", onClick = {
+                exportLauncher.launch("Lei记账-${LocalDate.now()}.csv")
+            }) { Chevron() }
+            RowDivider()
+            SettingRow("📥", "从 CSV 文件导入", "导入之前导出的账单，重复的会自动跳过", onClick = {
+                importLauncher.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream"))
+            }) { Chevron() }
+            RowDivider()
+            SettingRow("📋", "粘贴文本导入", "旧版本「分享导出」的文字内容，复制后粘贴进来", onClick = { showPaste = true }) { Chevron() }
+            RowDivider()
+            SettingRow("📤", "分享导出", "以文字形式发给自己或其它 App", onClick = {
                 scope.launch {
                     val csv = vm.exportCsv()
                     val send = Intent(Intent.ACTION_SEND).apply {
@@ -272,6 +293,44 @@ fun SettingsScreen(vm: MainViewModel) {
     }
 
     if (showLogs) CaptureLogDialog(vm) { showLogs = false }
+    if (showPaste) {
+        PasteImportDialog(
+            onDismiss = { showPaste = false },
+            onImport = {
+                vm.importPasted(it)
+                showPaste = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun PasteImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("粘贴导入") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "在旧版本里点「导出全部账单」，分享时选「复制」（或发到文件传输助手再复制），然后粘贴到下面。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text("时间,收支,金额,分类,…") },
+                    minLines = 5,
+                    maxLines = 10,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onImport(text) }, enabled = text.isNotBlank()) { Text("导入") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 /** 设置项：左侧 emoji 图标 + 标题 + 说明，右侧放状态 / 开关 / 箭头 */

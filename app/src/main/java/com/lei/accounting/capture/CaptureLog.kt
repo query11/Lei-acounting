@@ -16,6 +16,7 @@ object CaptureLog {
     const val PAGE = "页面"
     const val OCR = "截图"
     const val MANUAL = "手动"
+    const val BANK = "银行"
 
     private const val KEEP = 500
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

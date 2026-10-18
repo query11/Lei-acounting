@@ -32,6 +32,33 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+      # 界面截图：渲染主要页面，缩小后以 base64 打印到日志里，方便远程查看排版
+      - name: UI screenshots
+        continue-on-error: true
+        run: ./gradlew :app:testDebugUnitTest --tests 'com.lei.accounting.ui.ScreenshotTest' --stacktrace
+
+      - name: Print screenshots
+        if: always()
+        continue-on-error: true
+        run: |
+          [ -d app/build/screenshots ] || { echo "no screenshots"; exit 0; }
+          command -v convert >/dev/null || sudo apt-get install -y -qq imagemagick >/dev/null
+          cd app/build/screenshots
+          for f in *.png; do
+            convert "$f" -resize 400x -quality 72 "/tmp/${f%.png}.jpg"
+            echo "===SHOT_BEGIN ${f%.png}==="
+            base64 -w 0 "/tmp/${f%.png}.jpg" | fold -w 3000
+            echo
+            echo "===SHOT_END==="
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: app/build/screenshots/
+          if-no-files-found: ignore
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

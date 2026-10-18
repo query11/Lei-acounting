@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -11,7 +12,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lei.accounting.core.model.PayApp
 import com.lei.accounting.core.model.formatYuan
 import kotlin.math.abs
@@ -109,6 +113,22 @@ private val DarkLei = LeiColors(
 
 val LocalLeiColors = staticCompositionLocalOf { LightLei }
 
+private val baseType = Typography()
+
+/** 字号层级：标题更紧凑有力，小标签略加字距，正文保持系统默认的易读性 */
+private val LeiTypography = Typography(
+    headlineMedium = baseType.headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
+    headlineSmall = baseType.headlineSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
+    titleLarge = baseType.titleLarge.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+    titleMedium = baseType.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+    titleSmall = baseType.titleSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp),
+    labelLarge = baseType.labelLarge.copy(letterSpacing = 0.2.sp),
+    labelSmall = baseType.labelSmall.copy(letterSpacing = 0.3.sp),
+)
+
+/** 列表里右对齐的金额用等宽数字，上下行的小数点能对齐 */
+val TabularNumbers = TextStyle(fontFeatureSettings = "tnum")
+
 private val LeiShapes = Shapes(
     small = RoundedCornerShape(10.dp),
     medium = RoundedCornerShape(16.dp),
@@ -122,6 +142,7 @@ fun LeiTheme(content: @Composable () -> Unit) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,
             shapes = LeiShapes,
+            typography = LeiTypography,
             content = content,
         )
     }
@@ -152,6 +173,7 @@ fun categoryEmoji(category: String): String = when (category) {
 fun PayApp.brandColor(): Color = when (this) {
     PayApp.WECHAT -> Color(0xFF07C160)
     PayApp.ALIPAY -> Color(0xFF1677FF)
+    PayApp.BANK -> Color(0xFFE34948)
     PayApp.MANUAL -> Color(0xFF898781)
 }
 
