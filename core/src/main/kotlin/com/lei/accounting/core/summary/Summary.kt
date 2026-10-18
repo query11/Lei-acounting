@@ -2,7 +2,7 @@ package com.lei.accounting.core.summary
 
 import com.lei.accounting.core.model.BillRecord
 import com.lei.accounting.core.model.BillType
-import com.lei.accounting.core.model.formatYuan
+import com.lei.accounting.core.model.formatYuanGrouped
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -80,8 +80,8 @@ data class Summary(
 
     /** 不依赖 AI 的本地文字总结 */
     fun toPlainText(): String = buildString {
-        append("${range.title}：支出 ¥${totalExpense.formatYuan()}")
-        if (totalIncome > 0) append("，收入 ¥${totalIncome.formatYuan()}")
+        append("${range.title}：支出 ¥${totalExpense.formatYuanGrouped()}")
+        if (totalIncome > 0) append("，收入 ¥${totalIncome.formatYuanGrouped()}")
         append("，共 ${count} 笔。")
         expenseChangePct?.let { pct ->
             val unit = when (range.period) { Period.DAY -> "昨天"; Period.WEEK -> "上周"; Period.MONTH -> "上月" }
@@ -89,7 +89,7 @@ data class Summary(
         }
         byCategory.take(3).takeIf { it.isNotEmpty() }?.let { top ->
             append("花得最多：")
-            append(top.joinToString("、") { "${it.category} ¥${it.cents.formatYuan()}" })
+            append(top.joinToString("、") { "${it.category} ¥${it.cents.formatYuanGrouped()}" })
             append("。")
         }
     }

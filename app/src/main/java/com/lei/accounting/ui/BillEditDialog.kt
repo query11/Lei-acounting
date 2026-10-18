@@ -51,6 +51,7 @@ import com.lei.accounting.data.BillEntity
 import com.lei.accounting.data.billType
 import com.lei.accounting.data.payApp
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** 解析用户输入的金额：允许「12」「12.」「12.5」「¥1,200」 */
 private fun parseAmountInput(text: String): Long? {
@@ -221,7 +222,7 @@ private fun CategoryGrid(categories: List<String>, selected: String, onSelect: (
 /** 自动记账的来源信息：时间、渠道、原文 */
 @Composable
 private fun BillInfo(bill: BillEntity) {
-    val time = SummaryCalculator.localDateTime(bill.time).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+    val time = SummaryCalculator.localDateTime(bill.time).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.SIMPLIFIED_CHINESE))
     val sources = BillMerger.decodeSources(bill.sources).joinToString(" + ") { it.label }
     Column(
         Modifier

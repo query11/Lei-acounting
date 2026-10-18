@@ -17,7 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lei.accounting.core.model.PayApp
-import com.lei.accounting.core.model.formatYuan
+import com.lei.accounting.core.model.formatYuanGrouped
 import kotlin.math.abs
 
 /**
@@ -91,6 +91,9 @@ data class LeiColors(
     val chartMuted: Color,
     /** 进度条底槽 */
     val track: Color,
+    /** 分段切换：底槽 / 选中的滑块（深色模式下滑块要比底槽亮，才像「浮起来」） */
+    val pillTrack: Color,
+    val pillIndicator: Color,
 )
 
 private val LightLei = LeiColors(
@@ -100,6 +103,8 @@ private val LightLei = LeiColors(
     chart = Color(0xFF2A78D6),
     chartMuted = Color(0xFF86B6EF),
     track = Color(0xFFECEDEF),
+    pillTrack = Color(0xFFE6E7EA),
+    pillIndicator = Color.White,
 )
 
 private val DarkLei = LeiColors(
@@ -109,6 +114,8 @@ private val DarkLei = LeiColors(
     chart = Color(0xFF3987E5),
     chartMuted = Color(0xFF184F95),
     track = Color(0xFF2C2C2A),
+    pillTrack = Color(0xFF1C1C1B),
+    pillIndicator = Color(0xFF3A3A37),
 )
 
 val LocalLeiColors = staticCompositionLocalOf { LightLei }
@@ -179,13 +186,10 @@ fun PayApp.brandColor(): Color = when (this) {
 
 /** ¥1,234.50；sign=true 时带 +/- 号 */
 fun yuan(cents: Long, sign: Boolean = false, positive: Boolean = true): String {
-    val raw = abs(cents).formatYuan()
-    val intPart = raw.substringBefore('.')
-    val grouped = intPart.reversed().chunked(3).joinToString(",").reversed()
     val prefix = when {
         !sign -> if (cents < 0) "-" else ""
         positive -> "+"
         else -> "-"
     }
-    return "$prefix¥$grouped.${raw.substringAfter('.')}"
+    return "$prefix¥${abs(cents).formatYuanGrouped()}"
 }

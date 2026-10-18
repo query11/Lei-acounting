@@ -66,3 +66,12 @@ fun Long.formatYuan(): String {
     val abs = kotlin.math.abs(this)
     return "$sign${abs / 100}.${(abs % 100).toString().padStart(2, '0')}"
 }
+
+/** 带千分位：1234.5 元 → 1,234.50 */
+fun Long.formatYuanGrouped(): String {
+    val raw = this.formatYuan()
+    val sign = if (raw.startsWith("-")) "-" else ""
+    val body = raw.removePrefix("-")
+    val grouped = body.substringBefore('.').reversed().chunked(3).joinToString(",").reversed()
+    return "$sign$grouped.${body.substringAfter('.')}"
+}

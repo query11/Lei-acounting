@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lei.accounting.core.summary.SummaryCalculator
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** 识别日志：看清楚每一笔是从哪个渠道收到的、为什么没记上 */
 @Composable
@@ -33,7 +34,7 @@ fun CaptureLogDialog(vm: MainViewModel, onDismiss: () -> Unit) {
     val logs by vm.logs.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val fmt = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")
+    val fmt = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss", Locale.SIMPLIFIED_CHINESE)
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize()) {

@@ -51,6 +51,7 @@ import com.lei.accounting.core.summary.Period
 import com.lei.accounting.core.summary.Summary
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.time.temporal.ChronoUnit
 
 @Composable
@@ -199,7 +200,7 @@ private fun StatTile(label: String, value: String, sub: String?, modifier: Modif
 }
 
 private val weekdayNames = listOf("一", "二", "三", "四", "五", "六", "日")
-private val readoutFmt = DateTimeFormatter.ofPattern("M月d日 E")
+private val readoutFmt = DateTimeFormatter.ofPattern("M月d日 E", Locale.SIMPLIFIED_CHINESE)
 
 /**
  * 每日支出柱状图（单一序列，一个颜色）。

@@ -1,5 +1,7 @@
 package com.lei.accounting.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -29,11 +31,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +58,7 @@ import com.lei.accounting.data.billType
 import com.lei.accounting.data.payApp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 val PeriodLabels = mapOf(Period.DAY to "今天", Period.WEEK to "本周", Period.MONTH to "本月")
 
@@ -135,9 +142,17 @@ private fun HeroCard(data: PeriodData?, canForward: Boolean, onShift: (Boolean) 
                 tint = white,
             )
             Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 2.dp)) {
-                Text("支出", style = MaterialTheme.typography.labelLarge, color = white.copy(alpha = 0.8f))
-                CountingAmount(data?.summary?.totalExpense ?: 0, color = white)
-                ChangeBadge(data?.summary)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Column(Modifier.weight(1f)) {
+                        Text("支出", style = MaterialTheme.typography.labelLarge, color = white.copy(alpha = 0.8f))
+                        CountingAmount(data?.summary?.totalExpense ?: 0, color = white)
+                        ChangeBadge(data?.summary)
+                    }
+                    val summary = data?.summary
+                    if (summary != null && summary.range.period != Period.DAY) {
+                        MiniTrend(summary, Modifier.padding(bottom = 6.dp))
+                    }
+                }
                 Spacer(Modifier.size(18.dp))
                 val s = data?.summary
                 Row(Modifier.fillMaxWidth()) {
@@ -146,6 +161,43 @@ private fun HeroCard(data: PeriodData?, canForward: Boolean, onShift: (Boolean) 
                     HeroStat("笔数", "${s?.count ?: 0}", Modifier.weight(0.6f))
                 }
             }
+        }
+    }
+}
+
+/**
+ * 总览卡片右侧的迷你趋势：这段时间每天的支出，今天最亮。
+ * 只是「一眼看形状」，具体数字在统计页。
+ */
+@Composable
+private fun MiniTrend(s: Summary, modifier: Modifier = Modifier) {
+    val days = generateSequence(s.range.start) { it.plusDays(1) }.takeWhile { it < s.range.endExclusive }.toList()
+    val values = days.map { s.dailyExpense[it] ?: 0L }
+    val max = values.maxOrNull()?.takeIf { it > 0 } ?: 1L
+    val today = LocalDate.now()
+    val grow = remember(s.range) { Animatable(0f) }
+    LaunchedEffect(s.range) { grow.animateTo(1f, tween(700, delayMillis = 150, easing = FastOutSlowInEasing)) }
+    val width = if (days.size > 10) 124.dp else 96.dp
+    Canvas(modifier.size(width = width, height = 44.dp)) {
+        val slot = size.width / days.size
+        val gap = if (days.size > 10) 1.5.dp.toPx() else 4.dp.toPx()
+        val barW = (slot - gap).coerceAtLeast(1.dp.toPx())
+        val r = (barW / 2).coerceAtMost(2.dp.toPx())
+        days.forEachIndexed { i, day ->
+            val v = values[i]
+            val h = if (v > 0) (v.toFloat() / max * size.height * grow.value).coerceAtLeast(3.dp.toPx()) else 2.dp.toPx()
+            val alpha = when {
+                day == today -> 0.95f
+                day > today -> 0.12f
+                v > 0 -> 0.42f
+                else -> 0.18f
+            }
+            drawRoundRect(
+                Color.White.copy(alpha = alpha),
+                topLeft = Offset(i * slot + (slot - barW) / 2, size.height - h),
+                size = Size(barW, h),
+                cornerRadius = CornerRadius(r, r),
+            )
         }
     }
 }
@@ -191,8 +243,8 @@ private fun HeroStat(label: String, value: String, modifier: Modifier) {
     }
 }
 
-private val dayFmt = DateTimeFormatter.ofPattern("M月d日 E")
-private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
+private val dayFmt = DateTimeFormatter.ofPattern("M月d日 E", Locale.SIMPLIFIED_CHINESE)
+private val timeFmt = DateTimeFormatter.ofPattern("HH:mm", Locale.SIMPLIFIED_CHINESE)
 
 @Composable
 private fun DayGroup(date: LocalDate, bills: List<BillEntity>, onClick: (BillEntity) -> Unit, modifier: Modifier = Modifier) {

@@ -80,6 +80,7 @@ fun <T> PillSwitcher(
 ) {
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val lei = LocalLeiColors.current
     val index = options.indexOf(selected).coerceAtLeast(0)
     var widthPx by remember { mutableIntStateOf(0) }
     val itemWidthPx = if (options.isEmpty()) 0f else widthPx.toFloat() / options.size
@@ -91,7 +92,7 @@ fun <T> PillSwitcher(
     Box(
         modifier
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .background(lei.pillTrack)
             .padding(4.dp)
             .height(IntrinsicSize.Min)
             .onSizeChanged { widthPx = it.width },
@@ -104,7 +105,7 @@ fun <T> PillSwitcher(
                     .fillMaxHeight()
                     .shadow(1.5.dp, CircleShape)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+                    .background(lei.pillIndicator),
             )
         }
         Row(Modifier.fillMaxWidth()) {

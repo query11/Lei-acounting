@@ -7,8 +7,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lei.accounting.core.model.BillType
 import com.lei.accounting.core.model.CaptureSource
@@ -77,10 +79,18 @@ class ScreenshotTest {
         )
     }
 
-    private fun shot(name: String, content: @Composable () -> Unit) {
+    private fun shot(name: String, topmostWindow: Boolean = false, content: @Composable () -> Unit) {
         compose.setContent(content)
         compose.waitForIdle()
-        val bitmap = runCatching { compose.onRoot().captureToImage().asAndroidBitmap() }.getOrElse {
+        val bitmap = runCatching {
+            if (topmostWindow) {
+                // 底部弹窗在单独的窗口里：取最上层的那个
+                val roots = compose.onAllNodes(isRoot())
+                roots[roots.fetchSemanticsNodes().size - 1].captureToImage().asAndroidBitmap()
+            } else {
+                compose.onRoot().captureToImage().asAndroidBitmap()
+            }
+        }.getOrElse {
             val view = compose.activity.window.decorView
             Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
         }
@@ -123,6 +133,41 @@ class ScreenshotTest {
             AppScaffold(tab = 0, onTab = {}, onAdd = {}) {
                 BillsContent(Period.DAY, periodData(Period.DAY), canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
             }
+        }
+    }
+
+    @Test
+    fun statsMonth() = shot("4_stats_month") {
+        LeiTheme {
+            AppScaffold(tab = 1, onTab = {}, onAdd = {}) {
+                StatsContent(Period.MONTH, periodData(Period.MONTH), aiText = "", busy = false, canForward = false, onPeriod = {}, onShift = {}, onGenerate = {})
+            }
+        }
+    }
+
+    @Test
+    fun billsMonth() = shot("5_bills_month") {
+        LeiTheme {
+            AppScaffold(tab = 0, onTab = {}, onAdd = {}) {
+                BillsContent(Period.MONTH, periodData(Period.MONTH), canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
+            }
+        }
+    }
+
+    @Test
+    fun settings() {
+        val vm = MainViewModel(ApplicationProvider.getApplicationContext<Application>())
+        shot("6_settings") {
+            LeiTheme {
+                AppScaffold(tab = 2, onTab = {}, onAdd = {}) { SettingsScreen(vm) }
+            }
+        }
+    }
+
+    @Test
+    fun editSheet() = shot("7_edit_sheet", topmostWindow = true) {
+        LeiTheme {
+            BillEditSheet(bill = sample[1], onDismiss = {}, onSave = {}, onDelete = {}, onReclassify = {})
         }
     }
 }
