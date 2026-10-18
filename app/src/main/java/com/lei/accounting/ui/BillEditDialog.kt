@@ -202,7 +202,8 @@ fun BillEditForm(
 private fun CategoryGrid(categories: List<String>, selected: String, onSelect: (String) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gap = 8.dp
-        val itemWidth = (maxWidth - gap * 3) / 4
+        // 留 1dp 余量：4 个格子 + 3 个间距正好等于整行宽度，像素取整后第 4 个会被挤到下一行
+        val itemWidth = (maxWidth - gap * 3) / 4 - 1.dp
         FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
             categories.forEach { c ->
                 val isSelected = c == selected
