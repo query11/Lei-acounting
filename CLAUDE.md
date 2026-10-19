@@ -39,9 +39,11 @@ app/   Android（Kotlin + Compose + Room + WorkManager + ML Kit 中文 OCR）
 - 签名：固定 keystore `app/signing/lei-accounting.jks`（v0.5.0 起），这样能覆盖安装。**不要改签名**，否则用户又得卸载重装、丢数据。
 - 每次发版改 `app/build.gradle.kts` 里的 versionCode / versionName。当前 v0.5.0（versionCode 5）。
 - Room 改表结构要写 Migration（见 Db.kt 里的 MIGRATION_1_2），不能用破坏性迁移。
-- 分支：`claude/peaceful-tesla-4oeyb3`。
+- core 单测可以在本地跑：`tools/core_test_local.sh`（临时生成只含 core 的 Gradle 项目，绕开 Android 插件下载）。
+- 分支：默认分支是 `claude/peaceful-tesla-4oeyb3`；每个会话在系统指定的 `claude/...` 分支上开发。
 
 ## 待验证 / 待办
+- **先读 `HANDOFF.md`**：2026-10-19 审查发现的问题（带复现输入）和分批改进计划，第一批还没开始做。
 - 用户还没真机测过 v0.5.0：银行卡识别、快捷开关（改成用透明页面收起下拉面板）、扫码付款识别都还要看实际效果。
 - 扫码付款漏记的根因没确认：还没拿到用户手机上的识别日志（里面有微信/支付宝页面的真实类名和能读到几条文字）。
   拿到后按日志调整 PayPageService 里的 PAY_PAGE_HINT / CASHIER_HINT。
