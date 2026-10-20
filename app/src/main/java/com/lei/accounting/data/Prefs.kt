@@ -3,6 +3,10 @@ package com.lei.accounting.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 简单的本地设置。API Key 只存在本机私有目录（且关闭了备份）。 */
 class Prefs(context: Context) {
@@ -50,6 +54,26 @@ class Prefs(context: Context) {
         set(v) = sp.edit { putBoolean("capture_log", v) }
 
     val aiReady: Boolean get() = aiEnabled && apiKey.isNotBlank()
+
+    /** 最近一次 DeepSeek 不可重试的报错（Key 无效、余额不足）；请求成功或重新保存 Key 时清空 */
+    var aiError: String
+        get() = sp.getString("ai_error", "").orEmpty()
+        set(v) = sp.edit { putString("ai_error", v) }
+
+    fun clearAiError() {
+        if (aiError.isNotEmpty()) aiError = ""
+    }
+
+    /** AI 能正常用：开着、填了 Key、最近没报错 */
+    val aiWorking: Boolean get() = aiReady && aiError.isBlank()
+
+    /** 盯着某个设置：先给当前值，之后每次变化再给一次（后台任务改了，界面也能跟着变） */
+    fun <T> observe(read: Prefs.() -> T): Flow<T> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(read(this@Prefs)) }
+        sp.registerOnSharedPreferenceChangeListener(listener)
+        send(read(this@Prefs))
+        awaitClose { sp.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()
 
     companion object {
         const val DEFAULT_MODEL = "deepseek-chat"

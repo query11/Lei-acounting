@@ -53,7 +53,7 @@
             </intent-filter>
         </service>
 
-        <!-- 无障碍服务：只读取微信 / 支付宝「支付成功」页面 -->
+        <!-- 无障碍服务：平时只读微信 / 支付宝的支付页面；收银台付款后临时读当前 App 3 分钟；快捷开关读当前页面 -->
         <service
             android:name=".capture.PayPageService"
             android:exported="true"

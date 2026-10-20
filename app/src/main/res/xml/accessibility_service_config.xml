@@ -2,6 +2,7 @@
 <!--
     省电关键：packageNames 只写微信和支付宝，系统只会把这两个 App 的界面事件发给我们，
     其它 App 里怎么滑动、打字都不会唤醒本服务。
+    例外：在收银台付款后的「付款窗口」（最多 3 分钟）里，PayPageService 运行时临时放开到所有 App，结束后立刻恢复。
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"

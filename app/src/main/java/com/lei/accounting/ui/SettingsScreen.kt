@@ -72,6 +72,7 @@ fun SettingsScreen(vm: MainViewModel) {
     val prefs = vm.prefs
     val busy by vm.busy.collectAsStateWithLifecycle()
     val latestNotification by vm.latestNotification.collectAsStateWithLifecycle()
+    val aiError by vm.aiError.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     // 每次回到页面都重新检查权限状态（用户可能刚从系统设置回来）
@@ -242,10 +243,18 @@ fun SettingsScreen(vm: MainViewModel) {
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (aiOn && aiError.isNotBlank()) {
+                    Text(
+                        "AI 分类已暂停：$aiError。改好后点「保存」，或者「测试连接」通过，就会接着分类。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
                         prefs.apiKey = key
                         prefs.model = model
+                        prefs.clearAiError()
                         vm.retryPendingAi()
                         Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                     }) { Text("保存") }

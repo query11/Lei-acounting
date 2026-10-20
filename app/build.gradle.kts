@@ -17,8 +17,8 @@ android {
         // 无障碍截图 API（takeScreenshot）需要 Android 11+；Flyme AIOS 远高于此
         minSdk = 30
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
     }
 
     // 固定签名：每次云端编译都用同一把钥匙，新版本才能直接覆盖安装、保留数据。

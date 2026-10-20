@@ -23,7 +23,15 @@ import java.util.concurrent.TimeUnit
 /** DeepSeek 的 OpenAI 兼容接口：https://api.deepseek.com/chat/completions */
 class DeepSeekClient(private val apiKey: String, private val model: String) {
 
-    class ApiException(message: String, val retryable: Boolean) : IOException(message)
+    class ApiException(message: String, val retryable: Boolean, val code: Int = 0) : IOException(message) {
+        /** 给用户看的说明（设置页显示） */
+        val userMessage: String
+            get() = when (code) {
+                401 -> "API Key 无效"
+                402 -> "DeepSeek 账户余额不足"
+                else -> message.orEmpty().take(80)
+            }
+    }
 
     suspend fun chat(prompt: ChatPrompt, maxTokens: Int = 300): String = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
@@ -49,7 +57,7 @@ class DeepSeekClient(private val apiKey: String, private val model: String) {
             if (!resp.isSuccessful) {
                 // 401 Key 错误 / 402 余额不足 不需要重试；429 / 5xx 可以稍后重试
                 val retryable = resp.code == 429 || resp.code >= 500
-                throw ApiException("DeepSeek HTTP ${resp.code}: ${text.take(200)}", retryable)
+                throw ApiException("DeepSeek HTTP ${resp.code}: ${text.take(200)}", retryable, resp.code)
             }
             val root = Json.parseToJsonElement(text).jsonObject
             root["choices"]?.jsonArray?.firstOrNull()

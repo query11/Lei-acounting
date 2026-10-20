@@ -17,9 +17,21 @@ mkdir -p "$DIR/gradle/wrapper"
 cp "$REPO/gradlew" "$DIR/"
 cp "$REPO/gradle/wrapper/gradle-wrapper.jar" "$REPO/gradle/wrapper/gradle-wrapper.properties" "$DIR/gradle/wrapper/"
 
+# Maven Central 偶尔对云端环境限流（429），先走 Google 的 Maven Central 镜像，不行再回 Maven Central
 cat > "$DIR/settings.gradle.kts" <<'EOF'
-pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }
-dependencyResolutionManagement { repositories { mavenCentral() } }
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositories {
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
+        mavenCentral()
+    }
+}
 rootProject.name = "lei-core-test"
 EOF
 

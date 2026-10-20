@@ -6,6 +6,7 @@ import com.lei.accounting.core.model.BillType
 import com.lei.accounting.core.model.CaptureSource
 import com.lei.accounting.core.model.PayApp
 import com.lei.accounting.core.parser.BankNotificationParser
+import com.lei.accounting.core.parser.BankNotificationParser.Source
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -69,6 +70,41 @@ class BankNotificationParserTest {
         assertNull(BankNotificationParser.parse("某银行", "您尾号1234的银行卡消费12.00元交易失败", 0))
         assertNull(BankNotificationParser.parse("美团", "您有一张10元优惠券即将过期", 0))
         assertNull(BankNotificationParser.parse("张三", "晚上一起吃饭吗，我请客100元", 0))
+    }
+
+    @Test fun bankMarketingIgnored() {
+        // 银行、信用卡 App 自己推的营销：有银行名、金额和「消费」，但不是一笔交易
+        assertNull(BankNotificationParser.parse("招商银行", "【招商银行】您的信用卡消费满88元可享立减10元，点击查看", 0))
+        assertNull(BankNotificationParser.parse("掌上生活", "招商银行信用卡：本周五美食消费满100元返20元", 0))
+        assertNull(BankNotificationParser.parse("云闪付", "您尾号1234的银行卡获得一张消费券，满50元可用，点击领取", 0))
+    }
+
+    @Test fun onlySmsAndBankAppsAreSources() {
+        val sms = "com.android.mms"
+        assertEquals(Source.SMS, BankNotificationParser.sourceOf(sms, sms))
+        assertEquals(Source.SMS, BankNotificationParser.sourceOf("com.example.sms", "com.example.sms"))
+        // 读不到默认短信 App 时，常见的系统短信 App 也算
+        assertEquals(Source.SMS, BankNotificationParser.sourceOf("com.android.mms", null))
+        for (pkg in listOf("cmb.pb", "com.cmbchina.ccd.pluto.cmbActivity", "com.icbc", "com.chinamworld.main", "com.android.bankabc", "com.unionpay", "com.bankcomm.Bankcomm")) {
+            assertEquals(pkg, Source.BANK_APP, BankNotificationParser.sourceOf(pkg, sms))
+        }
+        // QQ 群里有人说「我工商银行卡刚才消费了500元」：不是银行发的，不处理
+        assertNull(BankNotificationParser.sourceOf("com.tencent.mobileqq", sms))
+        assertNull(BankNotificationParser.sourceOf("com.taobao.taobao", sms))
+    }
+
+    @Test fun smsNeedsCardTail() {
+        val b = BankNotificationParser.parse("95588", "您尾号8464卡10月18日12:31支出(消费)25.50元，余额1000.00元【工商银行】", 0, Source.SMS)!!
+        assertEquals(2550L, b.amountCents)
+        assertEquals(BillType.EXPENSE, b.type)
+        assertEquals("工商银行 尾号8464", b.payMethod)
+        // 朋友发来的短信：有银行、金额和「消费」，但没有卡号尾号
+        assertNull(BankNotificationParser.parse("张三", "我工商银行卡刚才消费了500元，怎么没短信", 0, Source.SMS))
+        // 「尾号*1234」、打码的卡号也算尾号
+        val c = BankNotificationParser.parse("95559", "【交通银行】您尾号*1234的卡于10月18日12:31网络支付转出25.50元", 0, Source.SMS)!!
+        assertEquals("交通银行 尾号1234", c.payMethod)
+        val d = BankNotificationParser.parse("95599", "【某某银行】您的账户6222****5678于10月18日消费人民币30.00元", 0, Source.SMS)!!
+        assertEquals("某某银行 尾号5678", d.payMethod)
     }
 
     @Test fun bankAlertMergesWithWechatRecord() {

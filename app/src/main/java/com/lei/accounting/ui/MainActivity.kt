@@ -19,7 +19,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handleIntent(intent)
+        // 旋转屏幕、切换深色模式时页面会重建，intent 还是原来那个，不能再处理一遍（否则关掉的编辑框又弹出来）
+        if (savedInstanceState == null) handleIntent(intent)
         if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
@@ -42,7 +43,10 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         intent ?: return
         val id = intent.getLongExtra(EXTRA_BILL_ID, 0L)
-        if (id > 0) vm.openBill(id)
+        if (id > 0) {
+            vm.openBill(id)
+            intent.removeExtra(EXTRA_BILL_ID)
+        }
         val amount = intent.getLongExtra(EXTRA_PREFILL_AMOUNT, 0L)
         if (amount > 0) {
             vm.prefill(

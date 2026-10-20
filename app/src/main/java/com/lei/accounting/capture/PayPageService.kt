@@ -39,7 +39,8 @@ import java.util.concurrent.Executors
  * - 平时只接收微信、支付宝的事件（运行时用 setServiceInfo 动态切换）；
  * - 界面变化做防抖，连续滚动只扫描一次；
  * - 先用 findAccessibilityNodeInfosByText("成功") 粗筛，没有就不遍历整棵树；
- * - 只有「像支付页但读不到文字」时才截图 OCR，同一页面最多 3 次，并且限频。
+ * - 只有「像支付页但读不到文字」时才截图 OCR：平时同一页面最多 3 次、4 秒一次；
+ *   付款窗口里不按页面算（输金额、输密码、出结果可能是同一个页面），2.5 秒一次，一个窗口最多 10 次。
  */
 class PayPageService : AccessibilityService() {
 
@@ -63,6 +64,8 @@ class PayPageService : AccessibilityService() {
         val wallTime: Long,
         var merchantPkg: String? = null,
         var merchantOcr: Int = 0,
+        /** 这个窗口里在微信/支付宝页面上自动截了几次图 */
+        var payPageOcr: Int = 0,
     )
 
     private var pending: PendingPayment? = null
@@ -105,8 +108,9 @@ class PayPageService : AccessibilityService() {
                 handler.postDelayed(pageProbeRunnable, PAGE_PROBE_DELAY_MS)
             }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                // 微信新版的支付结果页、收银台上的金额都是原地刷新出来的，不切换 Activity
-                if (isPayLikePage() && autoOcrOnThisPage < MAX_AUTO_OCR_PER_PAGE) {
+                // 微信新版的支付结果页、收银台上的金额都是原地刷新出来的，不切换 Activity；
+                // 付款窗口里不管类名像不像支付页都要看
+                if ((isPayLikePage() || pending != null) && hasAutoOcrQuota()) {
                     handler.removeCallbacks(pageProbeRunnable)
                     handler.postDelayed(pageProbeRunnable, PAGE_PROBE_DELAY_MS)
                 }
@@ -160,7 +164,9 @@ class PayPageService : AccessibilityService() {
     private fun probePage() {
         val app = lastApp ?: return
         val root = rootInActiveWindow
-        val texts = root?.takeIf { PayApp.fromPackage(it.packageName?.toString()) != null }?.let { collectTexts(it) }.orEmpty()
+        // 延迟检查时用户可能已经切到别的 App 了：只读、只截微信和支付宝自己的页面（拿不到页面时照旧截图）
+        val inPayApp = root == null || PayApp.fromPackage(root.packageName?.toString()) != null
+        val texts = root?.takeIf { inPayApp }?.let { collectTexts(it) }.orEmpty()
         if (lastClassName != lastLoggedClassName) {
             lastLoggedClassName = lastClassName
             CaptureLog.add(this, CaptureLog.PAGE, app.pkg, "打开页面 ${lastClassName.substringAfterLast('.')}，可读文字 ${texts.size} 条", lastClassName)
@@ -171,11 +177,32 @@ class PayPageService : AccessibilityService() {
             CASHIER_HINT.containsMatchIn(lastClassName) ->
                 openPaymentWindow(app, null, lastClassName)
         }
-        // 付款窗口里（刚扫码、刚打开收银台），读不到文字的页面都截图看一眼
-        if (texts.size < MIN_READABLE_TEXTS && (isPayLikePage() || pending != null) && autoOcrOnThisPage < MAX_AUTO_OCR_PER_PAGE) {
-            autoOcrOnThisPage++
-            ocr(app, manual = false)
+        // 读不到文字的支付页面（包括扫一扫、付款码），以及付款窗口里的页面，截图看一眼
+        if (inPayApp && texts.size < MIN_READABLE_TEXTS && (isPayLikePage() || pending != null) && prefs.ocrFallback && hasAutoOcrQuota()) {
+            val wait = ocrCooldownLeft()
+            if (wait > 0) {
+                // 刚截过图：冷却完再看一次，免得最后停住的那一屏（支付结果）没人截
+                handler.removeCallbacks(pageProbeRunnable)
+                handler.postDelayed(pageProbeRunnable, wait)
+            } else if (ocr(app, manual = false)) {
+                useAutoOcrQuota()
+            }
         }
+    }
+
+    /** 自动截图额度：付款窗口里按整个窗口算，平时按页面算 */
+    private fun hasAutoOcrQuota(): Boolean =
+        pending?.let { it.payPageOcr < MAX_AUTO_OCR_PER_WINDOW } ?: (autoOcrOnThisPage < MAX_AUTO_OCR_PER_PAGE)
+
+    private fun useAutoOcrQuota() {
+        val p = pending
+        if (p != null) p.payPageOcr++ else autoOcrOnThisPage++
+    }
+
+    /** 还要等多久才能再自动截图：付款窗口里限频短一些 */
+    private fun ocrCooldownLeft(): Long {
+        val interval = if (pending != null) WINDOW_OCR_INTERVAL_MS else OCR_INTERVAL_MS
+        return (lastOcrAt + interval - SystemClock.elapsedRealtime()).coerceAtLeast(0)
     }
 
     // ---------------------------------------------------------------- 付款窗口（线上付款）
@@ -330,13 +357,11 @@ class PayPageService : AccessibilityService() {
 
     // ---------------------------------------------------------------- 截图 OCR
 
-    /** 微信 / 支付宝页面读不到文字时的自动 OCR */
-    private fun ocr(app: PayApp, manual: Boolean) {
+    /** 微信 / 支付宝页面读不到文字时的自动 OCR；返回这次有没有真的截图（关了截图兜底、还在冷却时不截） */
+    private fun ocr(app: PayApp, manual: Boolean): Boolean {
         if (!manual) {
-            if (!prefs.ocrFallback) return
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastOcrAt < OCR_INTERVAL_MS) return
-            lastOcrAt = now
+            if (!prefs.ocrFallback || ocrCooldownLeft() > 0) return false
+            lastOcrAt = SystemClock.elapsedRealtime()
         }
         screenshotLines { lines ->
             if (lines == null) return@screenshotLines
@@ -356,6 +381,7 @@ class PayPageService : AccessibilityService() {
                     CaptureLog.add(this, CaptureLog.OCR, app.pkg, "截图里没有支付成功页", CaptureLog.summarize(lines))
             }
         }
+        return true
     }
 
     /** 截一张屏并 OCR，结果在主线程回调；截图失败（安全页面禁止截图）时回调 null */
@@ -441,14 +467,16 @@ class PayPageService : AccessibilityService() {
         private const val SHADE_CLOSE_DELAY_MS = 900L
         private const val PAYMENT_WINDOW_MS = 3 * 60_000L
         private const val OCR_INTERVAL_MS = 4_000L
+        private const val WINDOW_OCR_INTERVAL_MS = 2_500L
         private const val MAX_AUTO_OCR_PER_PAGE = 3
+        private const val MAX_AUTO_OCR_PER_WINDOW = 10
         private const val MAX_NODES = 400
         private const val MIN_READABLE_TEXTS = 3
 
         /**
-         * 支付相关页面的类名特征。
-         * 微信：钱包/收银台/转账页，以及新版用「Lite」小程序页面展示支付结果；
-         * 支付宝：收银台 MspContainerActivity、H5/小程序容器。
+         * 支付相关页面的类名特征：读不到文字时允许截图识别（只在微信、支付宝里）。
+         * 微信：钱包/收银台/转账页，以及新版用「Lite」小程序页面展示支付结果；扫一扫、付款码；
+         * 支付宝：收银台 MspContainerActivity、H5/小程序容器、扫一扫、付款码（onsitepay）。
          * 实际类名可以在「识别日志」里看到，不准的话按日志调整这里。
          */
         private val PAY_PAGE_HINT = Regex(
@@ -456,11 +484,12 @@ class PayPageService : AccessibilityService() {
         )
 
         /**
-         * 这些页面之后很可能紧跟着一笔付款，看到就打开付款窗口：
-         * 被其它 App 拉起的收银台（支付宝 msp / flybird，微信 OrderHandlerUI / WalletPayUI），
-         * 扫一扫（微信 BaseScanUI、支付宝 MainCaptureActivity），付款码（微信 WalletOfflineCoinPurseUI、支付宝 onsitepay）。
+         * 真正的收银台（支付宝 msp / flybird，微信 OrderHandlerUI / WalletPayUI），看到就打开付款窗口、临时监听所有 App：
+         * 线上付款付完会跳回购物 App，结果要在那边看。
+         * 扫一扫（微信 BaseScanUI、支付宝 MainCaptureActivity）、付款码（微信 WalletOfflineCoinPurseUI、支付宝 onsitepay）
+         * 不在这里：线下付款本来就在微信、支付宝里完成，不需要看其它 App；它们在 [PAY_PAGE_HINT] 里，读不到文字时照样截图。
          */
-        private val CASHIER_HINT = Regex("(?i)msp|flybird|cashier|orderhandler|walletpay|scan|capture|offline|coinpurse|onsitepay")
+        private val CASHIER_HINT = Regex("(?i)msp|flybird|cashier|orderhandler|walletpay")
 
         /** 付款窗口里不需要看的系统界面 */
         private val SKIP_PKG = Regex("(?i)systemui|inputmethod|keyboard|launcher|^android$|com\\.android\\.settings")

@@ -109,7 +109,7 @@ class ScreenshotTest {
     fun bills() = shot("1_bills") {
         LeiTheme {
             AppScaffold(tab = 0, onTab = {}, onAdd = {}) {
-                BillsContent(Period.WEEK, periodData(Period.WEEK), canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
+                BillsContent(Period.WEEK, periodData(Period.WEEK), aiWorking = true, canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
             }
         }
     }
@@ -137,7 +137,7 @@ class ScreenshotTest {
     fun billsDark() = shot("3_bills_dark") {
         LeiTheme {
             AppScaffold(tab = 0, onTab = {}, onAdd = {}) {
-                BillsContent(Period.DAY, periodData(Period.DAY), canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
+                BillsContent(Period.DAY, periodData(Period.DAY), aiWorking = true, canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
             }
         }
     }
@@ -155,7 +155,7 @@ class ScreenshotTest {
     fun billsMonth() = shot("5_bills_month") {
         LeiTheme {
             AppScaffold(tab = 0, onTab = {}, onAdd = {}) {
-                BillsContent(Period.MONTH, periodData(Period.MONTH), canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
+                BillsContent(Period.MONTH, periodData(Period.MONTH), aiWorking = true, canForward = false, onPeriod = {}, onShift = {}, onBillClick = {})
             }
         }
     }

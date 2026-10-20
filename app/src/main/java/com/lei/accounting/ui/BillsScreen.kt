@@ -66,9 +66,11 @@ val PeriodLabels = mapOf(Period.DAY to "今天", Period.WEEK to "本周", Period
 fun BillsScreen(vm: MainViewModel) {
     val data by vm.data.collectAsStateWithLifecycle()
     val period by vm.period.collectAsStateWithLifecycle()
+    val aiWorking by vm.aiWorking.collectAsStateWithLifecycle()
     BillsContent(
         period = period,
         data = data,
+        aiWorking = aiWorking,
         canForward = vm.canGoForward,
         onPeriod = vm::setPeriod,
         onShift = vm::shift,
@@ -76,11 +78,15 @@ fun BillsScreen(vm: MainViewModel) {
     )
 }
 
-/** 账单页（无状态，方便预览和截图测试） */
+/**
+ * 账单页（无状态，方便预览和截图测试）。
+ * @param aiWorking AI 能正常分类（开着、填了 Key、最近没报错）时，待分类的账单才显示「AI 分类中…」
+ */
 @Composable
 fun BillsContent(
     period: Period,
     data: PeriodData?,
+    aiWorking: Boolean,
     canForward: Boolean,
     onPeriod: (Period) -> Unit,
     onShift: (Boolean) -> Unit,
@@ -111,7 +117,7 @@ fun BillsContent(
         val grouped = d.bills.groupBy { SummaryCalculator.localDateTime(it.time).toLocalDate() }
         grouped.forEach { (date, list) ->
             item(key = "day$date") {
-                DayGroup(date, list, onBillClick, Modifier.animateItem())
+                DayGroup(date, list, aiWorking, onBillClick, Modifier.animateItem())
             }
         }
     }
@@ -249,7 +255,7 @@ private val dayFmt = DateTimeFormatter.ofPattern("M月d日 E", Locale.SIMPLIFIED
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm", Locale.SIMPLIFIED_CHINESE)
 
 @Composable
-private fun DayGroup(date: LocalDate, bills: List<BillEntity>, onClick: (BillEntity) -> Unit, modifier: Modifier = Modifier) {
+private fun DayGroup(date: LocalDate, bills: List<BillEntity>, aiWorking: Boolean, onClick: (BillEntity) -> Unit, modifier: Modifier = Modifier) {
     val dayExpense = bills.filter { it.billType == BillType.EXPENSE }.sumOf { it.amountCents }
     val dayIncome = bills.filter { it.billType == BillType.INCOME }.sumOf { it.amountCents }
     val today = LocalDate.now()
@@ -284,7 +290,7 @@ private fun DayGroup(date: LocalDate, bills: List<BillEntity>, onClick: (BillEnt
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         ) {
             bills.forEachIndexed { i, bill ->
-                BillRow(bill) { onClick(bill) }
+                BillRow(bill, aiWorking) { onClick(bill) }
                 if (i < bills.lastIndex) {
                     HorizontalDivider(Modifier.padding(start = 70.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -294,7 +300,7 @@ private fun DayGroup(date: LocalDate, bills: List<BillEntity>, onClick: (BillEnt
 }
 
 @Composable
-private fun BillRow(bill: BillEntity, onClick: () -> Unit) {
+private fun BillRow(bill: BillEntity, aiWorking: Boolean, onClick: () -> Unit) {
     val lei = LocalLeiColors.current
     val expense = bill.billType == BillType.EXPENSE
     Row(
@@ -334,7 +340,7 @@ private fun BillRow(bill: BillEntity, onClick: () -> Unit) {
                 AppTag(bill.payApp)
             }
             val hint = when {
-                bill.aiStatus == AiStatus.PENDING && bill.payApp != PayApp.MANUAL -> "AI 分类中…"
+                aiWorking && bill.aiStatus == AiStatus.PENDING && bill.payApp != PayApp.MANUAL -> "AI 分类中…"
                 else -> bill.note
             }
             if (hint.isNotBlank()) {

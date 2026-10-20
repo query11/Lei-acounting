@@ -4,5 +4,5 @@
     <string name="notification_service_label">Lei记账 · 支付通知识别</string>
     <string name="accessibility_service_label">Lei记账 · 支付页面识别</string>
     <string name="tile_label">识别记账</string>
-    <string name="accessibility_service_description">只读取微信和支付宝「支付成功」页面上的金额和商户，用于自动记账。不会读取其它 App，不会点击或操作任何界面。</string>
+    <string name="accessibility_service_description">用于自动记账，只读取，不点击、不操作任何界面。平时只读微信和支付宝的支付页面；在它们的收银台付款后，会临时读取当前 App 的页面最多 3 分钟，看到支付结果就停；点下拉快捷开关「识别记账」时读取当前页面。读不到文字时在本机截图识别，图片不上传。</string>
 </resources>

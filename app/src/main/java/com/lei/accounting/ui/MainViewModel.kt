@@ -80,6 +80,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val logs: StateFlow<List<CaptureLogEntity>> = repo.logs.observeRecent(300)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** DeepSeek 最近一次报错（Key 无效、余额不足…），设置页显示 */
+    val aiError: StateFlow<String> = prefs.observe(Prefs::aiError)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), prefs.aiError)
+
+    /** AI 开着、填了 Key、最近没报错：这时账单上才显示「AI 分类中…」 */
+    val aiWorking: StateFlow<Boolean> = prefs.observe(Prefs::aiWorking)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), prefs.aiWorking)
+
     /** 最近一次收到微信/支付宝通知的记录，用来判断通知是不是被关掉了 */
     val latestNotification: StateFlow<CaptureLogEntity?> = repo.logs.observeLatest(CaptureLog.NOTIFICATION)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -188,9 +196,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun testApi(key: String, model: String) = viewModelScope.launch {
         _busy.value = true
         try {
-            val reply = DeepSeekClient(key.trim(), model.trim().ifBlank { Prefs.DEFAULT_MODEL })
+            val modelName = model.trim().ifBlank { Prefs.DEFAULT_MODEL }
+            val reply = DeepSeekClient(key.trim(), modelName)
                 .chat(ChatPrompt("你是一个测试助手。", "只回复两个字：成功", jsonOutput = false), maxTokens = 10)
             _message.value = "连接正常：${reply.trim().take(20)}"
+            // 测的就是已保存的 Key：之前的报错（比如余额不足，已经充值了）可以清掉，接着分类
+            if (key.trim() == prefs.apiKey && modelName == prefs.model) {
+                prefs.clearAiError()
+                retryPendingAi()
+            }
         } catch (e: Exception) {
             _message.value = "连接失败：${e.message?.take(120)}"
         } finally {
@@ -198,8 +212,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 回到 App 时补跑没分类的账单；上次 Key 无效、余额不足时不再白白请求，等用户在设置里保存或测试通过 */
     fun retryPendingAi() {
-        if (prefs.aiReady) AiClassifyWorker.enqueue(getApplication())
+        if (prefs.aiWorking) AiClassifyWorker.enqueue(getApplication())
     }
 
     /** 导出全部账单为 CSV 文本（带 BOM，Excel 打开不乱码） */
